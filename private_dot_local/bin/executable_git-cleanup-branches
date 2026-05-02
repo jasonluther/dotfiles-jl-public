@@ -1,0 +1,354 @@
+#!/usr/bin/env python3
+"""Analyze git worktrees and branches for cleanup.
+
+By default, reports which branches can be removed (dry-run).
+Pass --delete to prompt for actual deletion.
+"""
+
+import argparse
+import os
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+
+
+GRACE_PERIOD_SECONDS = 60 * 60  # 60 minutes
+
+
+@dataclass
+class BranchInfo:
+    name: str
+    worktree_path: str | None = None
+    unmerged_subjects: list[str] = field(default_factory=list)
+    dirty_file_count: int = 0
+    is_main: bool = False
+    skip_reason: str | None = None
+    rebased: bool = False
+
+
+def run(*args, cwd=None):
+    result = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
+    return result.returncode, result.stdout.strip(), result.stderr.strip()
+
+
+def get_main_branch():
+    """Detect the main/master branch name."""
+    rc, out, _ = run("git", "symbolic-ref", "refs/remotes/origin/HEAD")
+    if rc == 0:
+        return out.removeprefix("refs/remotes/origin/")
+    # Fallback: check for main or master
+    rc, branches, _ = run("git", "branch", "--list", "main", "master")
+    for line in branches.splitlines():
+        name = line.strip().removeprefix("* ")
+        if name in ("main", "master"):
+            return name
+    return "main"
+
+
+def get_worktrees():
+    """Return list of (path, branch) for all worktrees."""
+    rc, out, _ = run("git", "worktree", "list", "--porcelain")
+    if rc != 0:
+        return []
+    worktrees = []
+    path = branch = None
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            path = line.removeprefix("worktree ")
+        elif line.startswith("branch "):
+            branch = line.removeprefix("branch refs/heads/")
+        elif line == "":
+            if path and branch:
+                worktrees.append((path, branch))
+            path = branch = None
+    # Handle last entry if no trailing blank line
+    if path and branch:
+        worktrees.append((path, branch))
+    return worktrees
+
+
+def worktree_is_recent(path):
+    """Check if a worktree was created or modified within the grace period."""
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return False
+    # Also check the most recent commit time in the worktree
+    rc, commit_time, _ = run("git", "-C", path, "log", "-1", "--format=%ct")
+    times = [mtime]
+    if rc == 0 and commit_time:
+        times.append(int(commit_time))
+    newest = max(times)
+    return (time.time() - newest) < GRACE_PERIOD_SECONDS
+
+
+def get_local_branches():
+    """Return list of local branch names."""
+    rc, out, _ = run("git", "branch", "--format=%(refname:short)")
+    if rc != 0:
+        return []
+    return [b.strip() for b in out.splitlines() if b.strip()]
+
+
+def get_dirty_file_count(worktree_path):
+    """Count untracked + uncommitted files in a worktree."""
+    rc, out, _ = run("git", "-C", worktree_path, "status", "--porcelain")
+    if rc != 0:
+        return 0
+    return len([line for line in out.splitlines() if line.strip()])
+
+
+def get_patch_id(commit_hash):
+    """Get the patch-id for a single commit."""
+    diff_proc = subprocess.Popen(
+        ["git", "diff-tree", "-p", commit_hash],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    )
+    patch_proc = subprocess.Popen(
+        ["git", "patch-id", "--stable"],
+        stdin=diff_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    )
+    diff_proc.stdout.close()
+    patch_out, _ = patch_proc.communicate()
+    if patch_proc.returncode != 0 or not patch_out.strip():
+        return None
+    return patch_out.decode().split()[0]
+
+
+def get_main_patch_ids(main_branch, branch):
+    """Get patch-ids on main since the branch diverged."""
+    rc, merge_base, _ = run("git", "merge-base", main_branch, branch)
+    if rc != 0:
+        return set()
+
+    log_proc = subprocess.Popen(
+        ["git", "log", "-p", "--no-merges", "--format=", f"{merge_base}..{main_branch}"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    )
+    patch_proc = subprocess.Popen(
+        ["git", "patch-id", "--stable"],
+        stdin=log_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    )
+    log_proc.stdout.close()
+    patch_out, _ = patch_proc.communicate()
+
+    ids = set()
+    if patch_proc.returncode == 0 and patch_out:
+        for line in patch_out.decode().splitlines():
+            parts = line.split()
+            if parts:
+                ids.add(parts[0])
+    return ids
+
+
+def is_commit_rebased(main_branch, branch, commit_hash):
+    """Check if a commit was rebased (same patch-id exists on main)."""
+    patch_id = get_patch_id(commit_hash)
+    if patch_id is None:
+        return False
+    return patch_id in get_main_patch_ids(main_branch, branch)
+
+
+def get_unmerged_commits(branch, main_branch):
+    """Return list of (hash, subject) for commits on branch not in main.
+
+    Uses git cherry-pick detection first, then falls back to patch-id
+    comparison for rebased commits. Returns (unmerged_list, was_rebased).
+    """
+    # Use --cherry-pick to filter out equivalent commits (handles rebases)
+    rc, out, _ = run(
+        "git", "log", "--cherry-pick", "--right-only", "--no-merges",
+        "--format=%H %s", f"{main_branch}...{branch}",
+    )
+    if rc != 0:
+        return [], False
+
+    commits = []
+    for line in out.splitlines():
+        line = line.strip()
+        if line:
+            hash_val, subject = line.split(" ", 1)
+            commits.append((hash_val, subject))
+
+    if not commits:
+        # Check if there were commits that were all filtered by --cherry-pick
+        rc2, raw_out, _ = run(
+            "git", "log", "--right-only", "--no-merges",
+            "--format=%H", f"{main_branch}...{branch}",
+        )
+        if rc2 == 0 and raw_out.strip():
+            return [], True  # All commits were rebased
+        return [], False
+
+    # Double-check remaining commits with patch-id comparison
+    truly_unmerged = []
+    for hash_val, subject in commits:
+        if is_commit_rebased(main_branch, branch, hash_val):
+            continue
+        truly_unmerged.append((hash_val, subject))
+
+    rebased = len(commits) > 0 and len(truly_unmerged) == 0
+    return truly_unmerged, rebased
+
+
+def has_merged_pr(branch):
+    """Check if a GitHub PR for this branch was merged."""
+    rc, out, _ = run(
+        "gh", "pr", "list", "--head", branch, "--state", "merged",
+        "--json", "number", "--jq", "length",
+    )
+    return rc == 0 and out.strip() not in ("", "0")
+
+
+def delete_branch_and_worktree(info):
+    """Remove worktree and delete branch."""
+    if info.worktree_path:
+        print(f"  Removing worktree: {info.worktree_path}")
+        run("git", "worktree", "remove", "--force", info.worktree_path)
+    # Delete local branch
+    print(f"  Deleting local branch: {info.name}")
+    run("git", "branch", "-D", info.name)
+    # Delete remote tracking branch if it exists
+    rc, _, _ = run("git", "rev-parse", "--verify", f"refs/remotes/origin/{info.name}")
+    if rc == 0:
+        print(f"  Deleting remote branch: origin/{info.name}")
+        run("git", "push", "origin", "--delete", info.name)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Analyze git worktrees and branches, cleaning up fully-merged ones.",
+    )
+    parser.add_argument(
+        "--delete", action="store_true",
+        help="Prompt to delete fully-merged branches (default is dry-run)",
+    )
+    args = parser.parse_args()
+
+    # Ensure we're in a git repo
+    rc, _, _ = run("git", "rev-parse", "--git-dir")
+    if rc != 0:
+        print("Error: not in a git repository.", file=sys.stderr)
+        sys.exit(1)
+
+    # Fetch latest remote state
+    print("Fetching remote state...")
+    run("git", "fetch", "--prune")
+
+    main_branch = get_main_branch()
+    print(f"Main branch: {main_branch}\n")
+
+    worktrees = get_worktrees()
+    worktree_branches = {branch: path for path, branch in worktrees}
+
+    branches = get_local_branches()
+    infos: list[BranchInfo] = []
+
+    for branch in branches:
+        info = BranchInfo(name=branch)
+
+        if branch == main_branch:
+            info.is_main = True
+            infos.append(info)
+            continue
+
+        wt_path = worktree_branches.get(branch)
+        info.worktree_path = wt_path
+
+        # Check grace period for worktrees
+        if wt_path and worktree_is_recent(wt_path):
+            info.skip_reason = "worktree modified within last 60 minutes"
+            infos.append(info)
+            continue
+
+        # Check for dirty files in worktree
+        if wt_path:
+            info.dirty_file_count = get_dirty_file_count(wt_path)
+
+        # Check for unmerged commits
+        unmerged, rebased = get_unmerged_commits(branch, main_branch)
+        info.unmerged_subjects = [subj for _, subj in unmerged]
+        info.rebased = rebased
+
+        # If git thinks commits are unmerged, check if GitHub PR was merged
+        if unmerged and has_merged_pr(branch):
+            info.unmerged_subjects = []
+            info.rebased = True
+
+        infos.append(info)
+
+    # Display results
+    to_delete = []
+    for info in infos:
+        if info.is_main:
+            continue
+
+        label = info.name
+        if info.worktree_path:
+            label += f"  (worktree: {info.worktree_path})"
+
+        print(f"Branch: {label}")
+
+        if info.skip_reason:
+            print(f"  Skipped: {info.skip_reason}")
+            print()
+            continue
+
+        has_issues = False
+
+        if info.dirty_file_count > 0:
+            print(f"  Uncommitted/untracked files: {info.dirty_file_count}")
+            has_issues = True
+
+        if info.unmerged_subjects:
+            print(f"  Unmerged commits:")
+            for subj in info.unmerged_subjects:
+                print(f"    - {subj}")
+            has_issues = True
+        elif info.rebased:
+            print(f"  All commits rebased into {main_branch}")
+
+        if not has_issues and not info.unmerged_subjects:
+            print(f"  Fully merged into {main_branch}")
+            to_delete.append(info)
+
+        print()
+
+    if not to_delete:
+        print("Nothing to clean up.")
+        return
+
+    print(f"The following {len(to_delete)} branch(es) can be removed:")
+    for info in to_delete:
+        parts = [info.name]
+        if info.worktree_path:
+            parts.append(f"+ worktree {info.worktree_path}")
+        if info.rebased:
+            parts.append("(rebased)")
+        print(f"  {' '.join(parts)}")
+
+    if not args.delete:
+        print("\nRun with --delete to remove these branches.")
+        return
+
+    try:
+        answer = input("\nDelete these branches? [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\nAborted.")
+        return
+
+    if answer != "y":
+        print("Aborted.")
+        return
+
+    for info in to_delete:
+        delete_branch_and_worktree(info)
+
+    # Clean up worktree bookkeeping
+    run("git", "worktree", "prune")
+    print("\nDone.")
+
+
+if __name__ == "__main__":
+    main()

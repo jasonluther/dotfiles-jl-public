@@ -1,0 +1,75 @@
+# Pre-commit configuration.
+# Pre-commit is the primary quality gate: heavy checks (full test suite, license check)
+# run in pre-commit so CI rarely fails. CI runs the same hooks via
+# `pre-commit run --all-files` with the slow ones SKIP-listed.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: detect-private-key
+
+  - repo: https://github.com/trufflesecurity/trufflehog
+    rev: v3.94.0
+    hooks:
+      - id: trufflehog
+        entry: trufflehog git file://. --max-depth=1 --results=verified,unverified,unknown --exclude-paths=.trufflehog-exclude.txt --fail
+        stages: [pre-commit]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.2
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright type checking
+        entry: npx --yes pyright
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-commit]
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.45.0
+    hooks:
+      - id: markdownlint
+        args: ["--config", ".markdownlint.yaml"]
+
+  - repo: local
+    hooks:
+      - id: vale-spelling-gate
+        name: Vale spelling check
+        entry: vale --minAlertLevel=error
+        language: system
+        types_or: [markdown]
+        stages: [pre-commit]
+
+      - id: pytest
+        name: Run full test suite
+        entry: .venv/bin/python -m pytest -n auto --tb=short -q
+        language: system
+        files: ^(src/|tests/)
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: pip-licenses
+        name: License compliance check
+        entry: pip-licenses --allow-only="Apache-2.0;Apache Software License;MIT;MIT License;BSD;BSD License;BSD-2-Clause;BSD-3-Clause;Python Software Foundation;Python Software Foundation License;PSF-2.0;ISC License;ISC License (ISCL);Mozilla Public License 2.0;Mozilla Public License 2.0 (MPL 2.0);Unlicense;The Unlicense;The Unlicense (Unlicense);MIT AND Python-2.0;Proprietary;UNKNOWN"
+        language: python
+        files: (pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+        stages: [pre-commit]
+        additional_dependencies: [pip-licenses>=4.0.0]

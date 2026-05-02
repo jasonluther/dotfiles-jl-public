@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Reset macOS hostname, removing any " (X)" suffix added by mDNS conflicts.
+# Usage: reset-hostname [hostname]
+
+set -euo pipefail
+
+if [[ -z "${1:-}" ]]; then
+    echo "Usage: $(basename "$0") <hostname>" >&2
+    echo "Sets ComputerName, HostName, LocalHostName, and NetBIOSName to <hostname>." >&2
+    exit 1
+fi
+hostname="$1"
+
+echo "Setting hostname to: $hostname"
+sudo scutil --set ComputerName "$hostname"
+sudo scutil --set LocalHostName "$hostname"
+sudo scutil --set HostName "$hostname.local"
+
+# Flush mDNS cache to pick up changes immediately
+sudo dscacheutil -flushcache
+sudo killall -HUP mDNSResponder 2>/dev/null || true
+
+echo "Done. All hostnames set to '$hostname' / '$hostname.local'."

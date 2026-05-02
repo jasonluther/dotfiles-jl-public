@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# Run the same linters that feed the VSCode "Problems" panel.
+# Outputs results in a single, scannable report.
+#
+# Usage: lint-problems [path]   (defaults to current directory)
+
+set -uo pipefail
+
+target="${1:-.}"
+target_abs="$(cd "$target" 2>/dev/null && pwd)" || { echo "Path not found: $target" >&2; exit 1; }
+cd "$target_abs"
+
+bold() { printf '\033[1m%s\033[0m\n' "$*"; }
+dim()  { printf '\033[2m%s\033[0m\n' "$*"; }
+ok()   { printf '\033[32m%s\033[0m\n' "$*"; }
+warn() { printf '\033[33m%s\033[0m\n' "$*"; }
+
+has() { command -v "$1" >/dev/null 2>&1; }
+
+has_python=false
+has_md=false
+has_sh=false
+has_yaml=false
+has_cpp=false
+
+shopt -s nullglob globstar
+for f in **/*.py;  do has_python=true; break; done
+for f in **/*.md;  do has_md=true;     break; done
+for f in **/*.sh;  do has_sh=true;     break; done
+for f in **/*.yml **/*.yaml; do has_yaml=true; break; done
+for f in **/*.cpp **/*.c **/*.h **/*.hpp; do has_cpp=true; break; done
+shopt -u nullglob globstar
+
+bold "lint-problems @ $target_abs"
+dim   "$(date '+%Y-%m-%d %H:%M:%S')"
+echo
+
+total_issues=0
+
+if $has_python && has ruff; then
+  bold "── Ruff (Python) ──"
+  out=$(ruff check . --output-format concise 2>&1) || true
+  if [ -z "$out" ] || echo "$out" | grep -q "All checks passed"; then
+    ok "  no issues"
+  else
+    echo "$out"
+    total_issues=$((total_issues + $(echo "$out" | grep -cE '^[^[:space:]]')))
+  fi
+  echo
+fi
+
+if $has_md && has markdownlint; then
+  bold "── markdownlint ──"
+  out=$(markdownlint '**/*.md' --ignore node_modules --ignore .venv 2>&1) || true
+  if [ -z "$out" ]; then
+    ok "  no issues"
+  else
+    echo "$out"
+    total_issues=$((total_issues + $(echo "$out" | wc -l)))
+  fi
+  echo
+fi
+
+if $has_md && has vale; then
+  bold "── Vale (Prose) ──"
+  out=$(vale --no-exit --output line . 2>&1) || true
+  if [ -z "$out" ]; then
+    ok "  no issues"
+  else
+    echo "$out"
+    total_issues=$((total_issues + $(echo "$out" | wc -l)))
+  fi
+  echo
+fi
+
+if $has_sh && has shellcheck; then
+  bold "── ShellCheck ──"
+  found=0
+  while IFS= read -r -d '' f; do
+    out=$(shellcheck -f gcc "$f" 2>&1) || true
+    if [ -n "$out" ]; then
+      echo "$out"
+      found=$((found + $(echo "$out" | wc -l)))
+    fi
+  done < <(find . -name '*.sh' -not -path '*/node_modules/*' -not -path '*/.venv/*' -print0)
+  if [ "$found" -eq 0 ]; then ok "  no issues"; fi
+  total_issues=$((total_issues + found))
+  echo
+fi
+
+if $has_yaml && has yamllint; then
+  bold "── yamllint ──"
+  out=$(yamllint -f parsable . 2>&1) || true
+  if [ -z "$out" ]; then
+    ok "  no issues"
+  else
+    echo "$out"
+    total_issues=$((total_issues + $(echo "$out" | wc -l)))
+  fi
+  echo
+fi
+
+if $has_cpp && has cppcheck; then
+  bold "── cppcheck ──"
+  cppcheck --enable=warning,style --quiet . 2>&1 || true
+  echo
+fi
+
+bold "── Summary ──"
+if [ "$total_issues" -eq 0 ]; then
+  ok "All linters clean."
+else
+  warn "$total_issues issue(s) found across linters."
+fi

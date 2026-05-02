@@ -1,0 +1,10 @@
+[core]
+	pager = delta
+
+[delta]
+	navigate = true
+	line-numbers = true
+	syntax-theme = TwoDark
+
+[interactive]
+	diffFilter = delta --color-only

@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""Gather diff context for code review in a single call.
+
+Computes the merge base, diff, commit log, changed files, and relevant
+CLAUDE.md files. Outputs JSON to stdout.
+
+Usage:
+    review-diff                          # uncommitted changes, or branch vs main
+    review-diff <branch>                 # <branch> vs main
+    review-diff --since "3 days ago"     # current branch, commits since time
+    review-diff <branch> --since "..."   # <branch>, commits since time
+
+If there are uncommitted changes (staged, unstaged, or untracked), they are
+reviewed first. Branch diff is only used when the worktree is clean.
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+def run(cmd: list[str], *, check: bool = True) -> str:
+    result = subprocess.run(cmd, capture_output=True, text=True, check=check)
+    return result.stdout.strip()
+
+
+def find_main_branch() -> str:
+    """Detect whether the repo uses 'main' or 'master'."""
+    for name in ("main", "master"):
+        rc = subprocess.run(
+            ["git", "rev-parse", "--verify", f"refs/heads/{name}"],
+            capture_output=True,
+        ).returncode
+        if rc == 0:
+            return name
+    return "main"
+
+
+def find_claude_md_files(changed_files: list[str]) -> list[str]:
+    """Find CLAUDE.md files relevant to the changed files."""
+    root = run(["git", "rev-parse", "--show-toplevel"])
+    found: set[str] = set()
+
+    # Always include root CLAUDE.md if it exists
+    root_claude = os.path.join(root, "CLAUDE.md")
+    if os.path.isfile(root_claude):
+        found.add("CLAUDE.md")
+
+    # Walk up from each changed file's directory to find CLAUDE.md files
+    seen_dirs: set[str] = set()
+    for f in changed_files:
+        d = os.path.dirname(f)
+        while d and d not in seen_dirs:
+            seen_dirs.add(d)
+            candidate = os.path.join(root, d, "CLAUDE.md")
+            if os.path.isfile(candidate):
+                found.add(os.path.join(d, "CLAUDE.md"))
+            d = os.path.dirname(d)
+
+    return sorted(found)
+
+
+def find_review_context() -> str | None:
+    """Return path to .claude/review-context.md if it exists."""
+    root = run(["git", "rev-parse", "--show-toplevel"])
+    path = os.path.join(root, ".claude", "review-context.md")
+    return ".claude/review-context.md" if os.path.isfile(path) else None
+
+
+def _diff_untracked(files: list[str]) -> str:
+    """Generate unified-diff-style patches for untracked files."""
+    root = run(["git", "rev-parse", "--show-toplevel"])
+    patches: list[str] = []
+    for f in files:
+        full = os.path.join(root, f)
+        try:
+            with open(full, "r") as fh:
+                lines = fh.readlines()
+        except (OSError, UnicodeDecodeError):
+            # Skip binary or unreadable files
+            continue
+        header = f"diff --git a/{f} b/{f}\nnew file mode 100644\n--- /dev/null\n+++ b/{f}\n"
+        header += f"@@ -0,0 +1,{len(lines)} @@\n"
+        body = "".join(f"+{line}" if line.endswith("\n") else f"+{line}\n\\ No newline at end of file\n" for line in lines)
+        patches.append(header + body)
+    return "\n".join(patches)
+
+
+def _has_uncommitted_changes() -> bool:
+    """Check if there are staged, unstaged, or untracked changes."""
+    if run(["git", "diff", "--name-only", "HEAD"], check=False):
+        return True
+    if run(["git", "ls-files", "--others", "--exclude-standard"], check=False):
+        return True
+    return False
+
+
+def _uncommitted(args: argparse.Namespace) -> None:
+    """Review uncommitted (staged + unstaged) changes against HEAD."""
+    branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+
+    diff_cmd = ["git", "diff", "HEAD"]
+    if args.stat_only:
+        diff_cmd.insert(2, "--stat")
+    diff = run(diff_cmd)
+    diffstat = run(["git", "diff", "--stat", "HEAD"])
+    changed_files_raw = run(["git", "diff", "--name-only", "HEAD"])
+    untracked = run(["git", "ls-files", "--others", "--exclude-standard"])
+
+    tracked_changes = changed_files_raw.splitlines() if changed_files_raw else []
+    untracked_files = untracked.splitlines() if untracked else []
+    changed_files = sorted(set(tracked_changes + untracked_files))
+
+    if not changed_files:
+        print(
+            json.dumps({"error": "No uncommitted changes found."}),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Append pseudo-diffs for untracked files so their content is visible
+    if untracked_files and not args.stat_only:
+        untracked_diff = _diff_untracked(untracked_files)
+        if untracked_diff:
+            diff = diff + "\n" + untracked_diff if diff else untracked_diff
+
+    claude_md_files = find_claude_md_files(changed_files)
+    review_context = find_review_context()
+
+    output = {
+        "branch": branch,
+        "mode": "uncommitted",
+        "commits": [],
+        "commit_count": 0,
+        "changed_files": changed_files,
+        "untracked_files": untracked_files,
+        "file_count": len(changed_files),
+        "diffstat": diffstat,
+        "claude_md_files": claude_md_files,
+        "review_context": review_context,
+    }
+
+    if not args.stat_only:
+        output["diff"] = diff
+
+    json.dump(output, sys.stdout, indent=2)
+    print()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("branch", nargs="?", help="Branch to review (default: current)")
+    parser.add_argument(
+        "--since", help="Only include commits since this time (e.g. '3 days ago')"
+    )
+    parser.add_argument(
+        "--stat-only",
+        action="store_true",
+        help="Return diffstat instead of full diff (for large diffs)",
+    )
+    args = parser.parse_args()
+
+    # Always review uncommitted changes first if they exist
+    if _has_uncommitted_changes():
+        return _uncommitted(args)
+
+    # Determine branch
+    branch = args.branch or run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    main_branch = find_main_branch()
+
+    if branch == main_branch:
+        print(
+            json.dumps({"error": f"Already on {main_branch} with no uncommitted changes, nothing to review."}),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Compute merge base
+    merge_base = run(["git", "merge-base", main_branch, branch])
+
+    # Determine base ref (merge base or --since)
+    base_ref = merge_base
+    if args.since:
+        first_commits = run(
+            [
+                "git", "log", "--reverse", "--format=%H",
+                f"--since={args.since}", branch,
+            ]
+        )
+        if first_commits:
+            first = first_commits.splitlines()[0]
+            # Use parent of first commit if it exists
+            parent = run(["git", "rev-parse", f"{first}~1"], check=False)
+            if parent:
+                base_ref = parent
+        else:
+            print(
+                json.dumps({"error": f"No commits since '{args.since}' on {branch}."}),
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    # Gather data
+    diff_cmd = ["git", "diff", f"{base_ref}..{branch}"]
+    if args.stat_only:
+        diff_cmd.insert(2, "--stat")
+    diff = run(diff_cmd)
+    commit_log = run(["git", "log", "--oneline", f"{base_ref}..{branch}"])
+    diffstat = run(["git", "diff", "--stat", f"{base_ref}..{branch}"])
+    changed_files_raw = run(
+        ["git", "diff", "--name-only", f"{base_ref}..{branch}"]
+    )
+    changed_files = changed_files_raw.splitlines() if changed_files_raw else []
+
+    commits = []
+    for line in commit_log.splitlines():
+        if line:
+            parts = line.split(" ", 1)
+            commits.append({"hash": parts[0], "message": parts[1] if len(parts) > 1 else ""})
+
+    claude_md_files = find_claude_md_files(changed_files)
+    review_context = find_review_context()
+
+    output = {
+        "branch": branch,
+        "main_branch": main_branch,
+        "merge_base": merge_base,
+        "base_ref": base_ref,
+        "commits": commits,
+        "commit_count": len(commits),
+        "changed_files": changed_files,
+        "file_count": len(changed_files),
+        "diffstat": diffstat,
+        "claude_md_files": claude_md_files,
+        "review_context": review_context,
+    }
+
+    if not args.stat_only:
+        output["diff"] = diff
+
+    json.dump(output, sys.stdout, indent=2)
+    print()
+
+
+if __name__ == "__main__":
+    main()

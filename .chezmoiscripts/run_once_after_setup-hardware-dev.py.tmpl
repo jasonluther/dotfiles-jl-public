@@ -1,0 +1,404 @@
+{{ if eq .chezmoi.os "darwin" -}}
+#!/usr/bin/env python3
+"""
+Hardware Development Environment Setup Script
+Installs and updates tools for Arduino, ESP32/ESP8266, CircuitPython, and AVR development
+"""
+
+import subprocess
+import sys
+import shutil
+from pathlib import Path
+from typing import List, Tuple, Optional
+
+# ANSI color codes
+GREEN = '\033[0;32m'
+BLUE = '\033[0;34m'
+YELLOW = '\033[1;33m'
+RED = '\033[0;31m'
+NC = '\033[0m'  # No Color
+
+def print_section(title: str) -> None:
+    """Print a colored section header."""
+    print(f"\n{BLUE}{'=' * 60}{NC}")
+    print(f"{BLUE}{title}{NC}")
+    print(f"{BLUE}{'=' * 60}{NC}\n")
+
+def print_success(message: str) -> None:
+    """Print a success message."""
+    print(f"{GREEN}✓ {message}{NC}")
+
+def print_warning(message: str) -> None:
+    """Print a warning message."""
+    print(f"{YELLOW}⚠ {message}{NC}")
+
+def print_error(message: str) -> None:
+    """Print an error message."""
+    print(f"{RED}✗ {message}{NC}")
+
+def print_info(message: str) -> None:
+    """Print an info message."""
+    print(f"{BLUE}ℹ {message}{NC}")
+
+def run_command(cmd: List[str], check: bool = True) -> Tuple[bool, str]:
+    """
+    Run a command and return success status and output.
+
+    Args:
+        cmd: Command and arguments as a list
+        check: Whether to raise exception on error
+
+    Returns:
+        Tuple of (success, output)
+    """
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=check
+        )
+        return (True, result.stdout)
+    except subprocess.CalledProcessError as e:
+        return (False, e.stderr)
+    except FileNotFoundError:
+        return (False, f"Command not found: {cmd[0]}")
+
+def check_homebrew() -> bool:
+    """Check if Homebrew is installed."""
+    return shutil.which('brew') is not None
+
+def check_python() -> bool:
+    """Check if Python 3 is installed."""
+    return sys.version_info >= (3, 8)
+
+def install_homebrew_packages() -> None:
+    """Install and update Homebrew packages for hardware development."""
+    print_section("📦 Installing/Updating Homebrew Packages")
+
+    packages = {
+        'arduino-cli': 'Arduino command-line interface',
+        'platformio': 'Professional embedded development platform',
+        'avrdude': 'AVR microcontroller programmer',
+        'avr-gcc@9': 'AVR GCC compiler',
+        'osx-cross/avr/avr-binutils': 'AVR binutils',
+    }
+
+    for package, description in packages.items():
+        print_info(f"Checking {package} ({description})...")
+
+        # Check if package is already installed
+        success, output = run_command(['brew', 'list', package], check=False)
+
+        if success:
+            print_info(f"  Updating {package}...")
+            success, output = run_command(['brew', 'upgrade', package], check=False)
+            if success or 'already installed' in output.lower():
+                print_success(f"  {package} is up to date")
+            else:
+                print_warning(f"  Could not update {package}: {output}")
+        else:
+            print_info(f"  Installing {package}...")
+            success, output = run_command(['brew', 'install', package], check=False)
+            if success:
+                print_success(f"  Installed {package}")
+            else:
+                print_error(f"  Failed to install {package}: {output}")
+
+def install_python_packages() -> None:
+    """Install CLI Python tools via pipx for hardware development."""
+    print_section("🐍 Installing/Updating Python CLI Tools (pipx)")
+
+    # CLI tools installed via pipx (isolated environments).
+    # Note: CircuitPython board libraries (pyserial, adafruit-circuitpython-*)
+    # belong in per-project environments, not the host Python.
+    # esptool is provided by Homebrew (see Brewfile).
+    pipx_packages = {
+        'adafruit-nrfutil': 'Adafruit nRF bootloader upload tool',
+    }
+
+    if not shutil.which('pipx'):
+        print_warning("pipx not found; skipping CLI tool installs")
+        print_info("  Install with: brew install pipx")
+        return
+
+    for package, description in pipx_packages.items():
+        print_info(f"Installing/Updating {package} ({description})...")
+        success, output = run_command(
+            ['pipx', 'install', '--force', package],
+            check=False
+        )
+        if success:
+            print_success(f"  {package} installed/updated")
+        else:
+            print_warning(f"  Could not install {package}: {output}")
+
+def setup_arduino_cli() -> None:
+    """Set up Arduino CLI with necessary cores and libraries."""
+    print_section("🔧 Configuring Arduino CLI")
+
+    if not shutil.which('arduino-cli'):
+        print_warning("arduino-cli not found, skipping configuration")
+        return
+
+    # Update core index
+    print_info("Updating core index...")
+    run_command(['arduino-cli', 'core', 'update-index'], check=False)
+
+    # Install cores
+    cores = [
+        ('arduino:avr', 'Arduino AVR Boards'),
+        ('arduino:megaavr', 'Arduino megaAVR Boards'),
+        ('arduino:samd', 'Arduino SAMD Boards (32-bit ARM)'),
+        ('esp32:esp32', 'ESP32 Boards'),
+        ('esp8266:esp8266', 'ESP8266 Boards'),
+        ('adafruit:samd', 'Adafruit SAMD Boards'),
+        ('adafruit:avr', 'Adafruit AVR Boards'),
+        ('rp2040:rp2040', 'Raspberry Pi Pico/RP2040'),
+    ]
+
+    # Add additional board manager URLs
+    print_info("Adding board manager URLs...")
+    board_urls = [
+        'https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json',
+        'https://arduino.esp8266.com/stable/package_esp8266com_index.json',
+        'https://adafruit.github.io/arduino-board-index/package_adafruit_index.json',
+        'https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json',
+    ]
+
+    for url in board_urls:
+        run_command(
+            ['arduino-cli', 'config', 'add', 'board_manager.additional_urls', url],
+            check=False
+        )
+
+    # Update index again with new URLs
+    run_command(['arduino-cli', 'core', 'update-index'], check=False)
+
+    # Install cores
+    for core, description in cores:
+        print_info(f"Installing {description}...")
+        success, output = run_command(
+            ['arduino-cli', 'core', 'install', core],
+            check=False
+        )
+        if success or 'already installed' in output.lower():
+            print_success(f"  {description} ready")
+        else:
+            print_warning(f"  Could not install {core}: {output}")
+
+    # Install commonly used libraries
+    print_info("\nInstalling common libraries...")
+    libraries = [
+        'Adafruit NeoPixel',
+        'FastLED',
+        'Adafruit GFX Library',
+        'Adafruit SSD1306',
+        'Adafruit BusIO',
+        'WiFiManager',
+        'PubSubClient',  # MQTT
+        'ArduinoJson',
+    ]
+
+    for library in libraries:
+        print_info(f"  Installing {library}...")
+        success, output = run_command(
+            ['arduino-cli', 'lib', 'install', library],
+            check=False
+        )
+        if success or 'already installed' in output.lower():
+            print_success(f"    {library} ready")
+
+def setup_platformio() -> None:
+    """Update PlatformIO platforms and tools."""
+    print_section("🔧 Updating PlatformIO")
+
+    if not shutil.which('pio'):
+        print_warning("PlatformIO not found, skipping update")
+        return
+
+    print_info("Updating PlatformIO core...")
+    run_command(['pio', 'upgrade'], check=False)
+
+    print_info("Updating PlatformIO platforms...")
+    run_command(['pio', 'platform', 'update'], check=False)
+
+    print_info("Updating PlatformIO libraries...")
+    run_command(['pio', 'lib', 'update'], check=False)
+
+    print_success("PlatformIO updated")
+
+def check_vscode_extensions() -> None:
+    """Check and recommend VSCode extensions."""
+    print_section("📝 VSCode Extensions Recommendations")
+
+    if not shutil.which('code'):
+        print_warning("VSCode 'code' command not found")
+        print_info("  Install VSCode and enable 'code' command in PATH")
+        return
+
+    recommended_extensions = {
+        'platformio.platformio-ide': 'PlatformIO IDE (Arduino, ESP, AVR, etc.)',
+        'joedevivo.vscode-circuitpython': 'CircuitPython support',
+        'esphome.esphome-vscode': 'ESPHome configuration',
+        'ms-vscode.cpptools': 'C/C++ IntelliSense',
+        'ms-vscode.cpptools-extension-pack': 'C/C++ Extension Pack',
+        'ms-vscode.cmake-tools': 'CMake Tools',
+        'vsciot-vscode.vscode-arduino': 'Arduino (alternative to PlatformIO)',
+    }
+
+    print_info("Checking installed extensions...")
+    success, output = run_command(['code', '--list-extensions'], check=False)
+
+    if success:
+        installed = set(output.strip().split('\n'))
+
+        for ext_id, description in recommended_extensions.items():
+            if ext_id in installed:
+                print_success(f"  {description} ✓")
+            else:
+                print_info(f"  {description}")
+                print_info(f"    Install: code --install-extension {ext_id}")
+    else:
+        print_warning("Could not check extensions")
+        print_info("\nRecommended extensions:")
+        for ext_id, description in recommended_extensions.items():
+            print_info(f"  {description}")
+            print_info(f"    code --install-extension {ext_id}")
+
+def update_all_homebrew() -> None:
+    """Update all Homebrew packages."""
+    print_section("🔄 Updating All Homebrew Packages")
+
+    print_info("Updating Homebrew itself...")
+    run_command(['brew', 'update'], check=False)
+
+    print_info("Upgrading all installed packages...")
+    run_command(['brew', 'upgrade'], check=False)
+
+    print_info("Cleaning up old versions...")
+    run_command(['brew', 'cleanup'], check=False)
+
+    print_success("Homebrew packages updated")
+
+def update_all_python_packages() -> None:
+    """Update all Python packages (excluding the ones in virtual envs)."""
+    print_section("🔄 Updating Python Packages")
+
+    print_info("Getting list of outdated packages...")
+    success, output = run_command(
+        [sys.executable, '-m', 'pip', 'list', '--outdated', '--format=json'],
+        check=False
+    )
+
+    if success and output.strip():
+        import json
+        try:
+            outdated = json.loads(output)
+            if outdated:
+                print_info(f"Found {len(outdated)} outdated packages")
+                for package in outdated:
+                    name = package['name']
+                    print_info(f"  Updating {name}...")
+                    run_command(
+                        [sys.executable, '-m', 'pip', 'install', '--upgrade', name],
+                        check=False
+                    )
+                print_success("Python packages updated")
+            else:
+                print_success("All Python packages are up to date")
+        except json.JSONDecodeError:
+            print_warning("Could not parse outdated packages")
+    else:
+        print_success("All Python packages appear to be up to date")
+
+def print_summary() -> None:
+    """Print setup summary and next steps."""
+    print_section("✅ Setup Complete")
+
+    print(f"{GREEN}Your hardware development environment is ready!{NC}\n")
+
+    print(f"{BLUE}Tools installed/updated:{NC}")
+    print("  • Arduino CLI")
+    print("  • PlatformIO")
+    print("  • AVR tools (avrdude, avr-gcc)")
+    print("  • adafruit-nrfutil (via pipx)")
+
+    print(f"\n{BLUE}Supported platforms:{NC}")
+    print("  • Arduino (AVR, megaAVR, SAMD)")
+    print("  • ESP32/ESP8266")
+    print("  • Adafruit boards")
+    print("  • Raspberry Pi Pico (RP2040)")
+    print("  • CircuitPython devices")
+
+    print(f"\n{BLUE}Next steps:{NC}")
+    print("  1. Restart VSCode if it's open")
+    print("  2. Install recommended VSCode extensions (see above)")
+    print("  3. Run 'arduino-cli board list' to test Arduino setup")
+    print("  4. Run 'pio system info' to test PlatformIO setup")
+    print("  5. Check available serial ports: 'ls /dev/tty.*'")
+
+    print(f"\n{YELLOW}Useful commands:{NC}")
+    print("  • arduino-cli board list          - List connected boards")
+    print("  • arduino-cli compile -b <board>  - Compile sketch")
+    print("  • arduino-cli upload -b <board>   - Upload sketch")
+    print("  • pio run                         - Build PlatformIO project")
+    print("  • pio run -t upload               - Upload PlatformIO project")
+    print("  • esptool.py --port /dev/tty.* flash_id - Check ESP chip (via Homebrew)")
+
+    print(f"\n{GREEN}Happy hacking! 🚀{NC}\n")
+
+def main() -> int:
+    """Main setup function."""
+    print(f"{BLUE}")
+    print("=" * 60)
+    print("  Hardware Development Environment Setup")
+    print("  Arduino | ESP32/ESP8266 | CircuitPython | AVR")
+    print("=" * 60)
+    print(f"{NC}\n")
+
+    # Pre-flight checks
+    if not check_python():
+        print_error("Python 3.8 or higher required")
+        return 1
+
+    if not check_homebrew():
+        print_error("Homebrew is not installed")
+        print_info("Install from: https://brew.sh")
+        return 1
+
+    print_success("Pre-flight checks passed")
+
+    try:
+        # Install and update packages
+        install_homebrew_packages()
+        install_python_packages()
+
+        # Configure tools
+        setup_arduino_cli()
+        setup_platformio()
+
+        # Update all packages
+        update_all_homebrew()
+        update_all_python_packages()
+
+        # Check VSCode extensions
+        check_vscode_extensions()
+
+        # Print summary
+        print_summary()
+
+        return 0
+
+    except KeyboardInterrupt:
+        print(f"\n\n{YELLOW}Setup interrupted by user{NC}")
+        return 130
+    except Exception as e:
+        print_error(f"Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+if __name__ == '__main__':
+    sys.exit(main())
+{{ end -}}

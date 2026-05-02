@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ '{{' }} github.ref {{ '}}' }}
+  cancel-in-progress: true
+
+env:
+  # Self-hosted toggle: set vars.RUNS_ON to 'self-hosted' in repo settings
+  # to run PR workflows on the local macOS runner pool. Push-to-main and
+  # Dependabot PRs always use GitHub-hosted ubuntu-latest.
+  IS_SELF_HOSTED: ${{ '{{' }} github.event_name != 'push' && github.actor != 'dependabot[bot]' && vars.RUNS_ON == 'self-hosted' {{ '}}' }}
+
+jobs:
+  test:
+    runs-on: ${{ '{{' }} github.event_name != 'push' && github.actor != 'dependabot[bot]' && vars.RUNS_ON || 'ubuntu-latest' {{ '}}' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v7
+        if: env.IS_SELF_HOSTED != 'true'
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - uses: actions/setup-python@v6
+        if: env.IS_SELF_HOSTED != 'true'
+        with:
+          python-version: "{{ python_version }}"
+
+      - uses: actions/setup-node@v6
+        if: env.IS_SELF_HOSTED != 'true'
+        with:
+          node-version: 'lts/*'
+          cache: npm
+
+      - uses: actions/cache@v5
+        if: env.IS_SELF_HOSTED != 'true'
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ '{{' }} runner.os {{ '}}' }}-${{ '{{' }} hashFiles('.pre-commit-config.yaml') {{ '}}' }}
+
+      - name: Install dependencies
+        run: |
+          uv sync --frozen --group dev
+          npm ci
+
+      - name: Lint and typecheck
+        env:
+          # Skip slow hooks (test suite runs as a separate step below for
+          # better log readability; vale runs in pre-commit only).
+          SKIP: pytest,vale-spelling-gate
+        run: uv run pre-commit run --all-files
+
+      - name: Run tests
+        run: uv run pytest -n auto --tb=short -q
+
+  ci:
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ '{{' }} needs.test.result {{ '}}' }}" != "success" ]]; then
+            echo "test=${{ '{{' }} needs.test.result {{ '}}' }}"
+            exit 1
+          fi

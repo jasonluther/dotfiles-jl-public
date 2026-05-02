@@ -1,0 +1,2 @@
+# Words Vale should flag as errors when they appear.
+# One word per line.

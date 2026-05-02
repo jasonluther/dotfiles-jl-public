@@ -1,0 +1,16 @@
+{{ if eq .chezmoi.os "darwin" -}}
+#!/bin/bash
+# Install Xcode CLI tools if not already installed
+if ! xcode-select -p &>/dev/null; then
+  xcode-select --install
+  echo "Waiting for Xcode CLI tools installation..."
+  until xcode-select -p &>/dev/null; do
+    sleep 5
+  done
+fi
+
+# Install Homebrew packages
+# Brewfile hash: {{ include "Brewfile" | sha256sum }}
+
+brew bundle --file={{ joinPath .chezmoi.sourceDir "Brewfile" | quote }}
+{{ end -}}

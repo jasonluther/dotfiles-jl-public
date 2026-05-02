@@ -1,0 +1,17 @@
+{{ if eq .chezmoi.os "darwin" -}}
+#!/bin/bash
+# Brewfile hash: {{ include "Brewfile" | sha256sum }}
+
+set -euo pipefail
+
+PYTHON_VERSIONS="3.13 3.14"
+for version in $PYTHON_VERSIONS; do
+  pyenv install --skip-existing "$(pyenv latest "$version" 2>/dev/null || echo "$version")"
+done
+
+# Upgrade pip for all pyenv-managed versions
+for version in $(pyenv versions --bare); do
+  echo "Upgrading pip for Python $version..."
+  "$HOME/.pyenv/versions/$version/bin/python" -m pip install --upgrade pip
+done
+{{ end -}}

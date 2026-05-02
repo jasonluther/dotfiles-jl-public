@@ -1,0 +1,6 @@
+{{ if ne .chezmoi.os "darwin" }}
+Library/
+Brewfile
+mas.txt
+vscode-extensions.txt
+{{ end }}

@@ -1,0 +1,31 @@
+# {{ project_name }}
+
+{{ description }}
+
+## Setup
+
+```bash
+uv sync --group dev
+pre-commit install
+```
+
+## Run tests
+
+```bash
+uv run pytest
+```
+
+## CI runner
+
+By default this repo uses GitHub-hosted runners. To use the local self-hosted
+runner pool:
+
+```bash
+./scripts/set-runner.sh self-hosted
+```
+
+To switch back:
+
+```bash
+./scripts/set-runner.sh github
+```
