@@ -47,13 +47,11 @@ This dotfiles repo is laid out flat at the chezmoi level (chezmoi requires this 
 
 ## Personal CLI utilities (`~/.local/bin/`)
 
-- `private_dot_local/bin/executable_gh-init` — scaffold a copier-templated project on GitHub.
 - `private_dot_local/bin/executable_git-cleanup-branches` — prune merged/abandoned local branches.
 - `private_dot_local/bin/executable_lint-problems` — run all linters that feed VSCode's Problems panel.
 - `private_dot_local/bin/executable_reset-hostname` — set macOS ComputerName/HostName/LocalHostName/NetBIOSName (requires hostname arg).
 - `private_dot_local/bin/executable_review-diff` — show a structured review of recent git diffs.
 - `private_dot_local/bin/executable_start-work-setup` — bring up a dev session (worktree + claude).
-- `private_dot_local/bin/executable_sync-gh.py` — keep `~/Code/gh/` in sync with starred/owned GitHub repos.
 
 ## Project scaffolding
 

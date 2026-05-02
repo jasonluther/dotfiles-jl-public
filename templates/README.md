@@ -16,8 +16,9 @@ git init && git add -A && git commit -m "chore: initial scaffold"
 (`copier.yml` lives at the dotfiles repo root so the source is git-tracked,
 which is what makes `copier update` work in scaffolded projects.)
 
-Or use `gh-init --template python-uv` which wraps the above and creates the
-GitHub repo in one shot.
+After scaffolding `python-uv-with-js`, run `npm install` and commit the
+generated `package-lock.json` before pushing — the rendered CI workflow
+uses `npm ci`, which requires a committed lockfile.
 
 ## Update an existing scaffolded project
 

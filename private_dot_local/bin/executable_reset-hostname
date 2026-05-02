@@ -15,6 +15,7 @@ echo "Setting hostname to: $hostname"
 sudo scutil --set ComputerName "$hostname"
 sudo scutil --set LocalHostName "$hostname"
 sudo scutil --set HostName "$hostname.local"
+sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string "$hostname"
 
 # Flush mDNS cache to pick up changes immediately
 sudo dscacheutil -flushcache

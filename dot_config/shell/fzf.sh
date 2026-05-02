@@ -9,6 +9,9 @@ if command -v brew >/dev/null 2>&1; then
   unset _fzf_prefix
 fi
 
+# Skip integration if fzf isn't installed yet (e.g. first login before brew bundle).
+command -v fzf >/dev/null 2>&1 || return 0
+
 if [ -n "${ZSH_VERSION:-}" ]; then
   source <(fzf --zsh)
 elif [ -n "${BASH_VERSION:-}" ]; then
