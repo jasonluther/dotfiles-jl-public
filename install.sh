@@ -32,9 +32,13 @@ if ((is_linux)); then
     echo "error: only apt-based Linux distros are supported" >&2
     exit 1
   fi
-  echo "==> apt prep (git, curl, ca-certificates)..."
+  # Minimal prereq for the chezmoi-installer fetch below. The full
+  # prereq set (git, gh, claude, …) is installed by scripts/linux/base.sh
+  # after chezmoi init clones the source. chezmoi uses its built-in git
+  # for the initial clone, so system git isn't needed yet.
+  echo "==> apt prep (curl, ca-certificates)..."
   sudo apt-get update -y
-  sudo apt-get install -y --no-install-recommends git curl ca-certificates
+  sudo apt-get install -y --no-install-recommends curl ca-certificates
 fi
 
 # Install chezmoi if missing. Use ~/.local/bin so we don't need sudo.

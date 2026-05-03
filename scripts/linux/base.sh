@@ -4,7 +4,10 @@
 
 set -euo pipefail
 
-sudo apt-get update -y
+# No leading `apt-get update` — install.sh just ran one before invoking
+# setup.sh, and the gh-install branch below runs another after adding the
+# upstream apt source. apt-get install is idempotent on already-present
+# packages, so re-listing the trio here is the standalone-use safety net.
 sudo apt-get install -y --no-install-recommends \
   git \
   curl \

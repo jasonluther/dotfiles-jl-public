@@ -18,21 +18,21 @@ if [[ "${ALLOW_NO_KEYS:-0}" != "1" ]] && [[ ! -s "$authorized" ]]; then
   exit 1
 fi
 
-# Pre-stage hardened sshd config so the daemon never starts with defaults.
 # Filename kept as 00-first-time.conf for back-compat with hosts originally
-# bootstrapped via the (now-retired) jasonluther/first-time repo.
+# bootstrapped via the (now-retired) jasonluther/first-time repo — renaming
+# would orphan the existing drop-in and leave it shadowing this one.
+conf=/etc/ssh/sshd_config.d/00-first-time.conf
+
 sudo install -d -m 0755 /etc/ssh/sshd_config.d
-sudo tee /etc/ssh/sshd_config.d/00-first-time.conf >/dev/null <<'EOF'
+sudo tee "$conf" >/dev/null <<'EOF'
 # Managed by jasonluther/dotfiles-jl-public scripts/linux. Edit upstream, not here.
 PasswordAuthentication no
 PermitRootLogin prohibit-password
 KbdInteractiveAuthentication no
 EOF
-sudo chmod 0644 /etc/ssh/sshd_config.d/00-first-time.conf
+sudo chmod 0644 "$conf"
 
 sudo apt-get install -y --no-install-recommends openssh-server
 
-# Reload in case openssh-server was already installed and running with stock
-# config; existing sessions persist across reload.
+sudo systemctl enable ssh
 sudo systemctl reload ssh 2>/dev/null || sudo systemctl restart ssh
-sudo systemctl enable --now ssh
