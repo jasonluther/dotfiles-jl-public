@@ -1,0 +1,11 @@
+# arduino-cli cores. Format: one `<vendor>:<arch>` per line.
+# Installed via `arduino-cli core install <name>` by scripts/setup-arduino-cli.sh.
+
+arduino:avr
+arduino:megaavr
+arduino:samd
+esp32:esp32
+esp8266:esp8266
+adafruit:samd
+adafruit:avr
+rp2040:rp2040

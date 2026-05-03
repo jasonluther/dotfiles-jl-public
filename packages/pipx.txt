@@ -3,3 +3,8 @@
 # Specs may include version pins (e.g. `copier==9.*`) — pipx forwards them.
 #
 # Pipx itself is installed via common.txt (brew on macOS, apt on Debian).
+
+adafruit-nrfutil
+esphome
+esptool
+platformio

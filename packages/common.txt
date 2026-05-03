@@ -7,9 +7,11 @@
 # Stuff that's mac-only or has no clean apt equivalent stays in Brewfile.
 
 awscli
+avrdude
 bat
 clang-format
 cmake
+dfu-programmer
 direnv
 dos2unix
 fswatch
