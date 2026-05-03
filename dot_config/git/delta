@@ -5,6 +5,13 @@
 	navigate = true
 	line-numbers = true
 	syntax-theme = TwoDark
+	features = decorations
+
+[delta "decorations"]
+	commit-decoration-style = bold yellow box ul
+	file-style = bold yellow ul
+	file-decoration-style = none
+	hunk-header-decoration-style = cyan box ul
 
 [interactive]
 	diffFilter = delta --color-only
