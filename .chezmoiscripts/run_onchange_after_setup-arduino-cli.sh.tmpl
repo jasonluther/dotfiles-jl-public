@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# Thin wrapper for scripts/setup-arduino-cli.sh — re-runs whenever any of
-# the arduino manifest files change.
-#
-# arduino-cores      hash: {{ include "packages/arduino-cores.txt" | sha256sum }}
-# arduino-libraries  hash: {{ include "packages/arduino-libraries.txt" | sha256sum }}
-# arduino-board-urls hash: {{ include "packages/arduino-board-urls.txt" | sha256sum }}
-
-exec {{ joinPath .chezmoi.sourceDir "scripts/setup-arduino-cli.sh" | quote }}

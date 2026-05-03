@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Install or update hardware development tooling: arduino-cli, PlatformIO,
+# AVR/ARM cross-compilers, esphome/esptool, and the Arduino cores/libraries
+# and PlatformIO platforms listed under packages/. Idempotent — re-run any
+# time to refresh.
+#
+# Default installs (common.txt / apt.txt / pipx.txt / Brewfile) intentionally
+# omit hardware-specific tooling; run this script when you actually need it.
+
+set -euo pipefail
+
+if ! command -v chezmoi >/dev/null 2>&1; then
+  echo "error: chezmoi not on PATH; cannot locate dotfiles source." >&2
+  exit 1
+fi
+
+SRC="$(chezmoi source-path)"
+
+case "$(uname -s)" in
+  Darwin)
+    if ! command -v brew >/dev/null 2>&1; then
+      echo "error: Homebrew not installed. Install from https://brew.sh first." >&2
+      exit 1
+    fi
+    echo "==> brew install (hardware formulae)"
+    brew tap osx-cross/avr
+    brew install \
+      arduino-cli \
+      picotool \
+      avrdude \
+      dfu-programmer \
+      osx-cross/avr/avr-gcc@9
+    echo "==> brew install --cask (hardware GUIs)"
+    brew install --cask arduino-ide
+    if command -v code >/dev/null 2>&1; then
+      echo "==> code --install-extension (hardware extensions)"
+      for ext in \
+        esphome.esphome-vscode \
+        joedevivo.vscode-circuitpython \
+        ms-vscode.vscode-serial-monitor \
+        platformio.platformio-ide; do
+        code --install-extension "$ext" --force
+      done
+    fi
+    ;;
+  Linux)
+    if ! command -v apt-get >/dev/null 2>&1; then
+      echo "error: only apt-based Linux is supported." >&2
+      exit 1
+    fi
+    echo "==> apt-get install (hardware packages)"
+    sudo apt-get update -y
+    sudo apt-get install -y --no-install-recommends \
+      avrdude \
+      dfu-programmer \
+      gcc-arm-none-eabi
+    if ! command -v arduino-cli >/dev/null 2>&1; then
+      echo "==> install arduino-cli to ~/.local/bin"
+      install -d "$HOME/.local/bin"
+      curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh \
+        | BINDIR="$HOME/.local/bin" sh
+    fi
+    ;;
+  *)
+    echo "error: unsupported OS '$(uname -s)'" >&2
+    exit 1
+    ;;
+esac
+
+# Cross-platform pipx tools. Use install-or-upgrade so re-runs refresh.
+if command -v pipx >/dev/null 2>&1; then
+  echo "==> pipx install/upgrade (hardware tools)"
+  for pkg in adafruit-nrfutil esphome esptool platformio; do
+    if pipx list --short 2>/dev/null | awk '{print $1}' | grep -qx "$pkg"; then
+      pipx upgrade "$pkg" || true
+    else
+      pipx install "$pkg"
+    fi
+  done
+else
+  echo "warning: pipx not on PATH; skipping adafruit-nrfutil/esphome/esptool/platformio" >&2
+fi
+
+# Arduino cores/libraries and PlatformIO platforms from the manifests.
+"$SRC/scripts/setup-arduino-cli.sh"
+"$SRC/scripts/install-platformio.sh"
+
+echo "✓ hardware dev setup complete"
