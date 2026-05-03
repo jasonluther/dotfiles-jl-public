@@ -5,7 +5,7 @@
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -19,14 +19,14 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/trufflesecurity/trufflehog
-    rev: v3.94.0
+    rev: v3.95.2
     hooks:
       - id: trufflehog
         entry: trufflehog git file://. --max-depth=1 --results=verified,unverified,unknown --exclude-paths=.trufflehog-exclude.txt --fail
         stages: [pre-commit]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.2
+    rev: v0.15.12
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -43,7 +43,7 @@ repos:
         stages: [pre-commit]
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.45.0
+    rev: v0.48.0
     hooks:
       - id: markdownlint
         args: ["--config", ".markdownlint.yaml"]
