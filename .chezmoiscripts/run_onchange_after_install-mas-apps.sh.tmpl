@@ -1,41 +1,6 @@
-{{ if eq .chezmoi.os "darwin" -}}
-#!/bin/bash
-# Install Mac App Store apps listed in mas.txt that aren't already in /Applications.
-#
-# Why filesystem check instead of `mas list`:
-#   `mas list` is unreliable on recent macOS (Apple changed the StoreKit APIs);
-#   it often returns stale or empty results, which causes brew bundle to retry
-#   `mas install` for already-installed apps and trigger an Apple ID auth loop.
+#!/usr/bin/env bash
+# Thin wrapper for scripts/install-mas-apps.sh.
 #
 # mas.txt hash: {{ include "mas.txt" | sha256sum }}
 
-set -euo pipefail
-
-mas_file={{ joinPath .chezmoi.sourceDir "mas.txt" | quote }}
-
-if ! command -v mas >/dev/null 2>&1; then
-  echo "mas not installed; run brew bundle first." >&2
-  exit 1
-fi
-
-missing_ids=()
-missing_names=()
-while IFS=' ' read -r id name; do
-  [[ -z "${id:-}" || "$id" == \#* ]] && continue
-  if [[ -d "/Applications/${name}.app" || -d "${HOME}/Applications/${name}.app" ]]; then
-    continue
-  fi
-  missing_ids+=("$id")
-  missing_names+=("$name")
-done < "$mas_file"
-
-if [[ ${#missing_ids[@]} -eq 0 ]]; then
-  echo "All Mac App Store apps already installed."
-  exit 0
-fi
-
-echo "Installing ${#missing_ids[@]} Mac App Store app(s):"
-for n in "${missing_names[@]}"; do echo "  - $n"; done
-
-mas install "${missing_ids[@]}"
-{{ end -}}
+exec {{ joinPath .chezmoi.sourceDir "scripts/install-mas-apps.sh" | quote }}
