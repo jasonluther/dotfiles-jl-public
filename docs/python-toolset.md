@@ -51,17 +51,7 @@ VS Code user `settings.json` should include:
 }
 ```
 
-## Fonts
-
-[Geist Mono](https://vercel.com/font) is the current pick — clean, modern, lighter feel than Monaspace at weight 300.
-
-The public `Brewfile` pins a small set of monospaced font casks so any of them can be tried by swapping `editor.fontFamily` / `terminal.integrated.fontFamily`:
-
-- `font-geist-mono` — current default
-- `font-jetbrains-mono` — strong fallback candidate
-- `font-ibm-plex-mono` — refined, has very light weights
-- `font-commit-mono`, `font-iosevka`, `font-maple-mono` — additional options
-- `font-monaspace`, `font-monaspace-nerd-font` — kept available; Nerd Font variant provides icon glyphs for shell prompts (starship, etc.)
+x
 
 ## Open questions
 
