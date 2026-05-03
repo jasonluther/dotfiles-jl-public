@@ -100,6 +100,59 @@ if [[ ${#available[@]} -gt 0 ]]; then
   echo "==> apt-get install (${#available[@]} packages)"
   sudo apt-get install -y --no-install-recommends "${available[@]}"
 fi
-if [[ ${#skipped[@]} -gt 0 ]]; then
-  printf '\033[1;33mskipped (not in apt):\033[0m %s\n' "${skipped[*]}" >&2
+
+# Fallback installers for tools Debian doesn't ship (or ships too stale).
+# Each handler installs the tool to ~/.local/bin (no sudo) and is idempotent.
+install -d "$HOME/.local/bin"
+
+fallback_ruff() {
+  command -v ruff >/dev/null 2>&1 && return 0
+  curl -LsSf https://astral.sh/ruff/install.sh | env UV_INSTALL_DIR="$HOME/.local/bin" sh
+}
+
+fallback_watchexec() {
+  command -v watchexec >/dev/null 2>&1 && return 0
+  local ver=2.5.1 arch
+  case "$(uname -m)" in
+    x86_64) arch=x86_64-unknown-linux-gnu ;;
+    aarch64 | arm64) arch=aarch64-unknown-linux-gnu ;;
+    *)
+      echo "watchexec: unsupported arch $(uname -m)" >&2
+      return 0
+      ;;
+  esac
+  local tarball="watchexec-${ver}-${arch}.tar.xz"
+  curl -fsSL "https://github.com/watchexec/watchexec/releases/download/v${ver}/${tarball}" \
+    | tar -xJ -C "$HOME/.local/bin" --strip-components=1 "watchexec-${ver}-${arch}/watchexec"
+}
+
+fallback_tldr() {
+  command -v tldr >/dev/null 2>&1 && return 0
+  # tealdeer is the rust tldr client; ships static linux binaries.
+  local ver=1.8.1 arch
+  case "$(uname -m)" in
+    x86_64) arch=x86_64-musl ;;
+    aarch64 | arm64) arch=aarch64-musl ;;
+    *)
+      echo "tldr: unsupported arch $(uname -m)" >&2
+      return 0
+      ;;
+  esac
+  curl -fsSL -o "$HOME/.local/bin/tldr" \
+    "https://github.com/tealdeer-rs/tealdeer/releases/download/v${ver}/tealdeer-linux-${arch}"
+  chmod +x "$HOME/.local/bin/tldr"
+}
+
+declare -a still_skipped=()
+for pkg in "${skipped[@]:-}"; do
+  case "$pkg" in
+    ruff) fallback_ruff ;;
+    watchexec) fallback_watchexec ;;
+    tldr) fallback_tldr ;;
+    *) still_skipped+=("$pkg") ;;
+  esac
+done
+
+if [[ ${#still_skipped[@]} -gt 0 ]]; then
+  printf '\033[1;33mskipped (not in apt):\033[0m %s\n' "${still_skipped[*]}" >&2
 fi
