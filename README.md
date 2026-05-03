@@ -60,6 +60,7 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply jasonluther/dotfiles-jl-pub
 - Claude Code commands, hooks, and base settings
 - Personal shell utilities under `~/.local/bin`
 - Copier templates for new Python projects
+- On-demand hardware dev setup — run `setup-hardware-dev` to install/update arduino-cli, PlatformIO, AVR/ARM toolchains, esphome/esptool, and the cores/libraries listed in `packages/arduino-*.txt` and `packages/platformio.txt`. Not installed by default.
 
 ## What's NOT included
 

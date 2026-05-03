@@ -3,11 +3,9 @@
 # Use the brew formula name; for differing apt names add an entry in apt-aliases.txt.
 
 awscli
-avrdude
 bat
 clang-format
 cmake
-dfu-programmer
 direnv
 dos2unix
 ffmpeg

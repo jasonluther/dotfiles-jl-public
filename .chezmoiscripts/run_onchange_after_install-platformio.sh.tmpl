@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-# Thin wrapper for scripts/install-platformio.sh.
-#
-# platformio.txt hash: {{ include "packages/platformio.txt" | sha256sum }}
-
-exec {{ joinPath .chezmoi.sourceDir "scripts/install-platformio.sh" | quote }}

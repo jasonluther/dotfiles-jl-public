@@ -4,9 +4,5 @@
 #
 # Pipx itself is installed via common.txt (brew on macOS, apt on Debian).
 
-adafruit-nrfutil
-esphome
-esptool
-platformio
 ruff
 tldr
