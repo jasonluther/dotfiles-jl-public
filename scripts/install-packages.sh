@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 # Install OS packages from packages/common.txt + the per-OS list.
-#
-#   macOS  : brew install <common> + brew bundle Brewfile
-#   Debian : apt-get install <common (translated via apt-aliases) + apt.txt>
-#
-# Idempotent — re-run any time. Invoked by chezmoi via
-# .chezmoiscripts/run_onchange_before_install-packages.sh.tmpl, or by hand.
+# Idempotent — re-run any time.
 
 set -euo pipefail
 
@@ -20,7 +15,6 @@ case "$(uname -s)" in
     ;;
 esac
 
-# Read a manifest into a global array, stripping comments and blank lines.
 read_list() {
   local arr_name="$1" path="$2" line
   eval "$arr_name=()"
@@ -84,15 +78,10 @@ done
 read_list apt_only "$SRC/packages/apt.txt"
 candidates+=("${apt_only[@]:-}")
 
-# Filter out packages that have no install candidate on this distro. Avoids
-# a single typo or distro-version mismatch failing the whole install.
-# `apt-cache show` returns 0 even for "ghost" packages with no candidate
-# (referenced by another package's metadata), so parse `apt-cache policy`
-# for a real Candidate that isn't `(none)`. Capture the output instead of
-# piping to `grep -q` — under `set -o pipefail`, grep's early exit sends
-# SIGPIPE to apt-cache and the whole pipeline returns 141, which would
-# cause this loop to skip every package whose policy output is longer
-# than grep's read buffer (i.e. nearly all of them).
+# Filter out packages with no install candidate on this distro. Capture
+# the policy output rather than `| grep -q`: under `pipefail`, grep's
+# early exit sends SIGPIPE to apt-cache and the whole pipeline returns
+# 141, which spuriously marks packages as skipped.
 sudo apt-get update -y
 available=()
 skipped=()
