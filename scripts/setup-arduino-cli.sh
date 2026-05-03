@@ -37,6 +37,7 @@ read_list() {
   done <"$path"
 }
 
+declare -a urls cores libs
 read_list urls "$URLS"
 read_list cores "$CORES"
 read_list libs "$LIBS"

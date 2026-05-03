@@ -1,0 +1,95 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel a previous in-flight run on the same ref when a new one starts.
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # action-shellcheck auto-discovers shell scripts by shebang. We exclude:
+      #  - .chezmoiscripts/  → bash + Jinja templating, won't parse as plain bash
+      #  - dot_config/shell/, dot_zshrc, dot_zprofile → zsh, which shellcheck does not support
+      - uses: ludeeus/action-shellcheck@2.0.0
+        env:
+          # SC1091: skip "source file not found" — sources resolve at $HOME at runtime.
+          SHELLCHECK_OPTS: -x -e SC1091
+        with:
+          ignore_paths: >-
+            .chezmoiscripts
+            dot_config/shell
+          ignore_names: >-
+            dot_zshrc
+            dot_zprofile
+
+  # shfmt deliberately not run as a CI gate: the existing scripts have
+  # intentional column alignment (e.g. dim/ok/warn helpers) and one-line
+  # for-loops that shfmt would reformat. Run `shfmt -d` locally if you want
+  # to opt in.
+
+  zsh-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: sudo apt-get install -y --no-install-recommends zsh
+      - name: zsh -n (parser-only check)
+        run: |
+          shopt -s nullglob
+          files=(dot_zshrc dot_zprofile dot_config/shell/*.sh)
+          for f in "${files[@]}"; do
+            [ -f "$f" ] || continue
+            echo "==> $f"
+            zsh -n "$f"
+          done
+
+  markdown:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: DavidAnson/markdownlint-cli2-action@v20
+        with:
+          config: dot_markdownlintrc
+          globs: |
+            **/*.md
+            !templates/**
+            !**/node_modules/**
+
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install actionlint
+        run: bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+      - run: ./actionlint -color
+
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      # Some Python scripts have a `.sh` extension (chezmoi-deployed names like
+      # ~/.claude/hooks/format-on-edit.sh) or no extension at all
+      # (~/.local/bin/start-work-setup). Discover by `python` shebang.
+      - name: ruff check + format (Python files, by shebang)
+        run: |
+          # shellcheck disable=SC2016
+          # $1 in single-quoted sh -c body is intentional (inner shell expands it).
+          mapfile -t files < <(
+            find . -type f \
+              \( -name '*.py' -o -path '*/bin/executable_*' -o -path '*/hooks/executable_*' \) \
+              -not -path './.git/*' \
+              -not -path './.ruff_cache/*' \
+              -print0 | xargs -0 -I{} sh -c 'head -1 "$1" | grep -qE "python" && echo "$1"' _ {}
+          )
+          [ ${#files[@]} -eq 0 ] && { echo "no python files"; exit 0; }
+          printf '%s\n' "${files[@]}"
+          uvx ruff check "${files[@]}"
+          uvx ruff format --check "${files[@]}"

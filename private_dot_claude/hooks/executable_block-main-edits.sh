@@ -39,9 +39,7 @@ def main() -> None:
         return
 
     # Find the main worktree (first entry in `git worktree list`).
-    worktree_output = run(
-        ["git", "-C", project_dir, "worktree", "list", "--porcelain"]
-    )
+    worktree_output = run(["git", "-C", project_dir, "worktree", "list", "--porcelain"])
     if not worktree_output:
         return
 

@@ -40,7 +40,7 @@ To re-run a subset of modules later:
 bash ~/.local/share/chezmoi/scripts/linux/setup.sh ssh-keys
 ```
 
-#### ⚠️ If you are SSH'd in over password right now
+### ⚠️ If you are SSH'd in over password right now
 
 `harden-sshd` disables password authentication. Existing sessions persist, but new logins will require a key. **Make sure your key is in `https://github.com/$GH_USER.keys` (default `jasonluther`; export `GH_USER=youruser` before running to override) or run from console.** Otherwise you can lock yourself out if the script fails between sshd reload and `ssh-keys` running.
 

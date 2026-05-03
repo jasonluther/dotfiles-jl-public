@@ -103,11 +103,14 @@ def get_patch_id(commit_hash):
     """Get the patch-id for a single commit."""
     diff_proc = subprocess.Popen(
         ["git", "diff-tree", "-p", commit_hash],
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
     )
     patch_proc = subprocess.Popen(
         ["git", "patch-id", "--stable"],
-        stdin=diff_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        stdin=diff_proc.stdout,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
     )
     diff_proc.stdout.close()
     patch_out, _ = patch_proc.communicate()
@@ -123,12 +126,22 @@ def get_main_patch_ids(main_branch, branch):
         return set()
 
     log_proc = subprocess.Popen(
-        ["git", "log", "-p", "--no-merges", "--format=", f"{merge_base}..{main_branch}"],
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        [
+            "git",
+            "log",
+            "-p",
+            "--no-merges",
+            "--format=",
+            f"{merge_base}..{main_branch}",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
     )
     patch_proc = subprocess.Popen(
         ["git", "patch-id", "--stable"],
-        stdin=log_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        stdin=log_proc.stdout,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
     )
     log_proc.stdout.close()
     patch_out, _ = patch_proc.communicate()
@@ -158,8 +171,13 @@ def get_unmerged_commits(branch, main_branch):
     """
     # Use --cherry-pick to filter out equivalent commits (handles rebases)
     rc, out, _ = run(
-        "git", "log", "--cherry-pick", "--right-only", "--no-merges",
-        "--format=%H %s", f"{main_branch}...{branch}",
+        "git",
+        "log",
+        "--cherry-pick",
+        "--right-only",
+        "--no-merges",
+        "--format=%H %s",
+        f"{main_branch}...{branch}",
     )
     if rc != 0:
         return [], False
@@ -174,8 +192,12 @@ def get_unmerged_commits(branch, main_branch):
     if not commits:
         # Check if there were commits that were all filtered by --cherry-pick
         rc2, raw_out, _ = run(
-            "git", "log", "--right-only", "--no-merges",
-            "--format=%H", f"{main_branch}...{branch}",
+            "git",
+            "log",
+            "--right-only",
+            "--no-merges",
+            "--format=%H",
+            f"{main_branch}...{branch}",
         )
         if rc2 == 0 and raw_out.strip():
             return [], True  # All commits were rebased
@@ -195,8 +217,17 @@ def get_unmerged_commits(branch, main_branch):
 def has_merged_pr(branch):
     """Check if a GitHub PR for this branch was merged."""
     rc, out, _ = run(
-        "gh", "pr", "list", "--head", branch, "--state", "merged",
-        "--json", "number", "--jq", "length",
+        "gh",
+        "pr",
+        "list",
+        "--head",
+        branch,
+        "--state",
+        "merged",
+        "--json",
+        "number",
+        "--jq",
+        "length",
     )
     return rc == 0 and out.strip() not in ("", "0")
 
@@ -221,7 +252,8 @@ def main():
         description="Analyze git worktrees and branches, cleaning up fully-merged ones.",
     )
     parser.add_argument(
-        "--delete", action="store_true",
+        "--delete",
+        action="store_true",
         help="Prompt to delete fully-merged branches (default is dry-run)",
     )
     args = parser.parse_args()
@@ -302,7 +334,7 @@ def main():
             has_issues = True
 
         if info.unmerged_subjects:
-            print(f"  Unmerged commits:")
+            print("  Unmerged commits:")
             for subj in info.unmerged_subjects:
                 print(f"    - {subj}")
             has_issues = True

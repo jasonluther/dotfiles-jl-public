@@ -27,6 +27,7 @@ read_list() {
   done <"$path"
 }
 
+declare -a common
 read_list common "$SRC/packages/common.txt"
 
 if [[ "$os" == "darwin" ]]; then

@@ -19,7 +19,6 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 
 def run(cmd: list[str], *, check: bool = True) -> str:
@@ -82,9 +81,16 @@ def _diff_untracked(files: list[str]) -> str:
         except (OSError, UnicodeDecodeError):
             # Skip binary or unreadable files
             continue
-        header = f"diff --git a/{f} b/{f}\nnew file mode 100644\n--- /dev/null\n+++ b/{f}\n"
+        header = (
+            f"diff --git a/{f} b/{f}\nnew file mode 100644\n--- /dev/null\n+++ b/{f}\n"
+        )
         header += f"@@ -0,0 +1,{len(lines)} @@\n"
-        body = "".join(f"+{line}" if line.endswith("\n") else f"+{line}\n\\ No newline at end of file\n" for line in lines)
+        body = "".join(
+            f"+{line}"
+            if line.endswith("\n")
+            else f"+{line}\n\\ No newline at end of file\n"
+            for line in lines
+        )
         patches.append(header + body)
     return "\n".join(patches)
 
@@ -173,7 +179,11 @@ def main() -> None:
 
     if branch == main_branch:
         print(
-            json.dumps({"error": f"Already on {main_branch} with no uncommitted changes, nothing to review."}),
+            json.dumps(
+                {
+                    "error": f"Already on {main_branch} with no uncommitted changes, nothing to review."
+                }
+            ),
             file=sys.stderr,
         )
         sys.exit(1)
@@ -186,8 +196,12 @@ def main() -> None:
     if args.since:
         first_commits = run(
             [
-                "git", "log", "--reverse", "--format=%H",
-                f"--since={args.since}", branch,
+                "git",
+                "log",
+                "--reverse",
+                "--format=%H",
+                f"--since={args.since}",
+                branch,
             ]
         )
         if first_commits:
@@ -210,16 +224,16 @@ def main() -> None:
     diff = run(diff_cmd)
     commit_log = run(["git", "log", "--oneline", f"{base_ref}..{branch}"])
     diffstat = run(["git", "diff", "--stat", f"{base_ref}..{branch}"])
-    changed_files_raw = run(
-        ["git", "diff", "--name-only", f"{base_ref}..{branch}"]
-    )
+    changed_files_raw = run(["git", "diff", "--name-only", f"{base_ref}..{branch}"])
     changed_files = changed_files_raw.splitlines() if changed_files_raw else []
 
     commits = []
     for line in commit_log.splitlines():
         if line:
             parts = line.split(" ", 1)
-            commits.append({"hash": parts[0], "message": parts[1] if len(parts) > 1 else ""})
+            commits.append(
+                {"hash": parts[0], "message": parts[1] if len(parts) > 1 else ""}
+            )
 
     claude_md_files = find_claude_md_files(changed_files)
     review_context = find_review_context()
