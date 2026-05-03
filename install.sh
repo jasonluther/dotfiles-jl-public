@@ -60,8 +60,10 @@ else
     # `chezmoi init` skips cloning when the source dir already exists, so
     # `--force` alone won't swap remotes. Refuse to wipe a dirty tree;
     # otherwise move it aside and re-clone.
-    if ! git -C "$CHEZMOI_SRC" diff --quiet HEAD 2>/dev/null ||
-      [[ -n "$(git -C "$CHEZMOI_SRC" status --porcelain 2>/dev/null)" ]]; then
+    dirty=0
+    git -C "$CHEZMOI_SRC" diff --quiet HEAD 2>/dev/null || dirty=1
+    [[ -z "$(git -C "$CHEZMOI_SRC" status --porcelain 2>/dev/null)" ]] || dirty=1
+    if ((dirty)); then
       echo "error: chezmoi source at $CHEZMOI_SRC points at '$current_url' (expected '$EXPECTED_URL') and has uncommitted changes." >&2
       echo "       Resolve manually, then re-run." >&2
       exit 1
