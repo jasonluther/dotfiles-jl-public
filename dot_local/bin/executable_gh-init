@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# Initialize a new GitHub repo, optionally scaffolding from a Copier template.
+#
+# Usage:
+#   gh-init                                                    # create repo, no template
+#   gh-init --template python-uv                               # scaffold then create
+#   gh-init --template python-uv-with-js
+#   gh-init --template python-uv --data project_name=foo ...   # non-interactive
+#   gh-init --no-template                                      # skip prompt
+#
+# Behavior:
+# - If repo has no commits yet and stdin is a TTY, prompt for template choice
+#   (unless --template or --no-template was passed).
+# - Templates live at $DOTFILES_PUBLIC_DIR (default: $HOME/Code/gh/dotfiles-jl-public).
+# - --data KEY=VALUE flags are forwarded verbatim to copier.
+# - If a remote already exists, just convert SSH GitHub remotes to HTTPS.
+
+set -euo pipefail
+
+TEMPLATE=""
+PROMPT_FOR_TEMPLATE="auto"
+COPIER_DATA=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --template)
+      TEMPLATE="${2:-}"
+      PROMPT_FOR_TEMPLATE="no"
+      shift 2
+      ;;
+    --no-template)
+      PROMPT_FOR_TEMPLATE="no"
+      shift
+      ;;
+    --data)
+      COPIER_DATA+=(--data "${2:-}")
+      shift 2
+      ;;
+    --defaults)
+      COPIER_DATA+=(--defaults)
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      echo "Usage: $0 [--template <flavor>|--no-template] [--data KEY=VALUE...] [--defaults]" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# copier.yml lives at the repo root so the source is git-tracked
+# (required for `copier update` to work in scaffolded projects).
+TEMPLATES_DIR="${DOTFILES_PUBLIC_DIR:-$HOME/Code/gh/dotfiles-jl-public}"
+
+if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+  git init
+fi
+
+# Decide whether to scaffold.
+HAS_COMMITS=$(git rev-parse HEAD &>/dev/null && echo 1 || echo 0)
+if [[ -z "$TEMPLATE" && "$PROMPT_FOR_TEMPLATE" == "auto" && "$HAS_COMMITS" == "0" && -t 0 ]]; then
+  echo "Apply a template? Choices:"
+  echo "  1) python-uv"
+  echo "  2) python-uv-with-js"
+  echo "  3) none"
+  read -r -p "Choose [1-3, default 3]: " choice
+  case "${choice:-3}" in
+    1) TEMPLATE="python-uv" ;;
+    2) TEMPLATE="python-uv-with-js" ;;
+    3 | "") TEMPLATE="" ;;
+    *) echo "Invalid choice; skipping template." >&2 ;;
+  esac
+fi
+
+if [[ -n "$TEMPLATE" ]]; then
+  if ! command -v copier &>/dev/null; then
+    echo "error: copier not installed. Run: brew install copier" >&2
+    exit 1
+  fi
+  if [[ ! -f "$TEMPLATES_DIR/copier.yml" ]]; then
+    echo "error: $TEMPLATES_DIR/copier.yml not found" >&2
+    exit 1
+  fi
+  echo "==> Scaffolding from template: $TEMPLATE"
+  copier copy "$TEMPLATES_DIR" . --data "flavor=$TEMPLATE" ${COPIER_DATA[@]+"${COPIER_DATA[@]}"}
+  git add -A
+  git commit -m "chore: scaffold from template ($TEMPLATE)"
+fi
+
+if [[ -z "$(git remote)" ]]; then
+  gh repo create --private --source .
+  git push --set-upstream origin main
+else
+  changed=0
+  for remote in $(git remote); do
+    url=$(git remote get-url "$remote")
+    if [[ "$url" =~ ^git@github\.com:(.+)$ ]]; then
+      new_url="https://github.com/${BASH_REMATCH[1]}"
+      git remote set-url "$remote" "$new_url"
+      echo "$remote: $url -> $new_url"
+      changed=$((changed + 1))
+    fi
+  done
+  if [[ $changed -eq 0 ]]; then
+    echo "No GitHub SSH remotes found to convert."
+  fi
+fi
