@@ -5,6 +5,14 @@ scripts/
 Brewfile
 mas.txt
 
+# Repo meta — present in source for the repo's own sake, not for $HOME.
+README.md
+install.sh
+copier.yml
+docs/
+bootstrap/
+templates/
+
 {{ if ne .chezmoi.os "darwin" }}
 Library/
 {{ end }}
