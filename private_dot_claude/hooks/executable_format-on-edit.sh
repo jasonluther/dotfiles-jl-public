@@ -69,7 +69,9 @@ def format_with_prettier(path: str) -> None:
 
 def format_shell(path: str) -> None:
     if shfmt := which("shfmt"):
-        run([shfmt, "-w", "-i", "2", "-ci", path])
+        # Match the flags used by .pre-commit-config.yaml's shfmt hook so
+        # format-on-edit output doesn't bounce when pre-commit re-runs shfmt.
+        run([shfmt, "-w", "-i", "2", "-ci", "-bn", path])
 
 
 def format_toml(path: str) -> None:

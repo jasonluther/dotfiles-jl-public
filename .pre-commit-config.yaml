@@ -56,12 +56,17 @@ repos:
     hooks:
       - id: shfmt
         args: [-i, "2", -ci, -bn, -d]
+        # private_dot_claude/hooks/ holds Python scripts deployed under .sh
+        # filenames (chezmoi target ~/.claude/hooks/*.sh); shfmt would parse
+        # them as bash and fail. CI's shfmt job filters by shebang so it
+        # avoids them naturally; this mirror is for local pre-commit.
         exclude: |
           (?x)^(
             \.chezmoiscripts/|
             dot_config/shell/|
             dot_zshrc$|
-            dot_zprofile$
+            dot_zprofile$|
+            private_dot_claude/hooks/
           )
 
   - repo: https://github.com/igorshubovych/markdownlint-cli

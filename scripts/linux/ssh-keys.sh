@@ -5,10 +5,30 @@
 # Keys are managed inside a marked block so revocations on GitHub propagate to
 # the host on re-run. Anything outside the block (e.g. keys you added manually)
 # is preserved.
+#
+# The GitHub username is derived from the chezmoi source repo's `origin`
+# remote — so a fork of this repo automatically pulls keys from the fork
+# owner's GitHub account, no editing required. Override with $GH_USER.
 
 set -euo pipefail
 
-GH_USER="${GH_USER:-jasonluther}"
+derive_gh_user() {
+  local src="${CHEZMOI_SRC:-$HOME/.local/share/chezmoi}" url
+  url="$(git -C "$src" remote get-url origin 2>/dev/null || true)"
+  # Match https://github.com/USER/... or git@github.com:USER/...
+  if [[ "$url" =~ github\.com[:/]([^/]+)/ ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+  fi
+  # Always return success — caller decides what to do with empty output.
+  return 0
+}
+
+GH_USER="${GH_USER:-$(derive_gh_user)}"
+if [[ -z "$GH_USER" ]]; then
+  echo "error: could not derive GitHub username from chezmoi source remote." >&2
+  echo "       Set GH_USER=<your-github-handle> and re-run." >&2
+  exit 1
+fi
 SRC_URL="https://github.com/${GH_USER}.keys"
 DEST="$HOME/.ssh/authorized_keys"
 # Block markers kept verbatim for back-compat with hosts originally bootstrapped

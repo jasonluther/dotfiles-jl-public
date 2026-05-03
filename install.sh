@@ -17,14 +17,25 @@
 
 set -euo pipefail
 
-REPO="jasonluther/dotfiles-jl-public"
+# REPO defaults to the canonical upstream but can be overridden so a forker
+# can run their own install.sh without editing this file:
+#
+#   REPO=alice/dotfiles-jl-public bash -c "$(curl -fsSL https://raw.githubusercontent.com/alice/dotfiles-jl-public/main/install.sh)"
+#
+# After bootstrap, .chezmoi.toml.tmpl derives the operator's git identity
+# from the cloned repo's `git log -1`, and scripts/linux/ssh-keys.sh derives
+# the GitHub username from the source's `origin` remote — so forks need no
+# additional editing for either to work.
+REPO="${REPO:-jasonluther/dotfiles-jl-public}"
 EXPECTED_URL="https://github.com/$REPO"
 CHEZMOI_SRC="$HOME/.local/share/chezmoi"
 BIN_DIR="$HOME/.local/bin"
 
 is_linux=0
+is_darwin=0
 case "$(uname -s)" in
   Linux*) is_linux=1 ;;
+  Darwin*) is_darwin=1 ;;
 esac
 
 if ((is_linux)); then
@@ -32,13 +43,32 @@ if ((is_linux)); then
     echo "error: only apt-based Linux distros are supported" >&2
     exit 1
   fi
-  # Minimal prereq for the chezmoi-installer fetch below. The full
-  # prereq set (git, gh, claude, …) is installed by scripts/linux/base.sh
-  # after chezmoi init clones the source. chezmoi uses its built-in git
-  # for the initial clone, so system git isn't needed yet.
-  echo "==> apt prep (curl, ca-certificates)..."
+  # Minimal prereqs for the chezmoi-installer fetch and for .chezmoi.toml.tmpl
+  # to derive identity via `git log` of the cloned source at init time. The
+  # full prereq set (gh, claude, …) is installed later by scripts/linux/base.sh.
+  echo "==> apt prep (curl, ca-certificates, git)..."
   sudo apt-get update -y
-  sudo apt-get install -y --no-install-recommends curl ca-certificates
+  sudo apt-get install -y --no-install-recommends curl ca-certificates git
+fi
+
+if ((is_darwin)); then
+  # Homebrew is required by scripts/install-packages.sh, which chezmoi
+  # apply runs as a `before_` script. Bootstrap it here so a fresh Mac
+  # actually works end-to-end. The official installer is idempotent and
+  # also installs the Xcode CLI tools as a side effect.
+  if ! command -v brew >/dev/null 2>&1 \
+    && [[ ! -x /opt/homebrew/bin/brew ]] \
+    && [[ ! -x /usr/local/bin/brew ]]; then
+    echo "==> Installing Homebrew (will prompt for sudo)..."
+    NONINTERACTIVE=1 /bin/bash -c \
+      "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  fi
+  # Put brew on PATH for the rest of this script (Apple Silicon vs Intel).
+  if [[ -x /opt/homebrew/bin/brew ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [[ -x /usr/local/bin/brew ]]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+  fi
 fi
 
 # Install chezmoi if missing. Use ~/.local/bin so we don't need sudo.

@@ -1,25 +1,44 @@
 {{/*
-  Identity is taken from CHEZMOI_NAME / CHEZMOI_EMAIL env vars, falling back
-  to `git config --global user.name` / `user.email`. If neither is set the
-  template fails loudly — no interactive prompt, so this works under
-  non-TTY installs (cloud-init, ssh, scripts).
+  Identity resolution (zero-config for the repo owner; works for forks too):
 
-  Override:
+    1. $CHEZMOI_NAME / $CHEZMOI_EMAIL env vars
+       For unattended installs (cloud-init, ssh-piped scripts, CI).
+    2. `git config --global user.name|user.email` if already set
+       For machines that already have a personal git identity.
+    3. `git log -1 --format=%an|%ae` of the cloned chezmoi source
+       Zero-config default — uses the most recent commit author of THIS
+       clone. For the repo owner that's themself; for a fresh fork it's
+       whoever committed last. After the forker pushes their own commit
+       to their fork, subsequent re-runs pick up their identity.
+
+  install.sh ensures system git is on PATH before `chezmoi init` runs,
+  so step 3 always has git available; the lookPath guard is belt-and-
+  braces for someone running chezmoi init by hand on a stripped box.
+
+  Non-TTY override:
     CHEZMOI_NAME='Jane Doe' CHEZMOI_EMAIL=jane@example.com \
       sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply jasonluther/dotfiles-jl-public
 */ -}}
+
+{{- $src := .chezmoi.sourceDir -}}
 
 {{- $name := env "CHEZMOI_NAME" -}}
 {{- if and (eq $name "") (lookPath "git") -}}
 {{-   $name = output "git" "config" "--global" "--default" "" "user.name" | trim -}}
 {{- end -}}
-{{- if eq $name "" -}}{{- fail "set CHEZMOI_NAME (or `git config --global user.name '<your name>'`) before running chezmoi init" -}}{{- end -}}
+{{- if and (eq $name "") (lookPath "git") -}}
+{{-   $name = output "git" "-C" $src "log" "-1" "--format=%an" | trim -}}
+{{- end -}}
+{{- if eq $name "" -}}{{- fail "no name available — set CHEZMOI_NAME, run `git config --global user.name '<your name>'`, or commit to the source repo so its git log has an author" -}}{{- end -}}
 
 {{- $email := env "CHEZMOI_EMAIL" -}}
 {{- if and (eq $email "") (lookPath "git") -}}
 {{-   $email = output "git" "config" "--global" "--default" "" "user.email" | trim -}}
 {{- end -}}
-{{- if eq $email "" -}}{{- fail "set CHEZMOI_EMAIL (or `git config --global user.email '<you@example.com>'`) before running chezmoi init" -}}{{- end -}}
+{{- if and (eq $email "") (lookPath "git") -}}
+{{-   $email = output "git" "-C" $src "log" "-1" "--format=%ae" | trim -}}
+{{- end -}}
+{{- if eq $email "" -}}{{- fail "no email available — set CHEZMOI_EMAIL, run `git config --global user.email '<you@example.com>'`, or commit to the source repo so its git log has an author" -}}{{- end -}}
 
 [data]
     name = {{ $name | quote }}

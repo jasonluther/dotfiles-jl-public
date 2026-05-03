@@ -16,17 +16,22 @@ bash -c "$(wget -qO- https://raw.githubusercontent.com/jasonluther/dotfiles-jl-p
 
 The `bash -c "$(...)"` form fully downloads the body before bash starts parsing — a dropped connection cannot run a truncated script.
 
-On either OS the wrapper installs chezmoi (if missing) and runs `chezmoi apply`. You'll be prompted for a git name and email on first run.
+**Zero-config first run.** On macOS the wrapper installs Homebrew if missing; on Linux it runs apt prep (curl, ca-certificates, git). Both then install chezmoi and run `chezmoi apply` — no interactive prompts:
 
-On Linux it additionally runs bootstrap modules from [`scripts/linux/`](scripts/linux/) before the apply:
+- Git identity (name + email) is derived from `git log -1` of the cloned source repo.
+- The GitHub username for SSH-key sync is derived from the source's `origin` remote.
 
-| module          | what it does                                                                                                                |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `ssh-keys`      | syncs keys from `https://github.com/$GH_USER.keys` (default `jasonluther`) into `~/.ssh/authorized_keys` (revocation-aware) |
-| `harden-sshd`   | drops a hardened `sshd_config.d/` snippet (key-only auth) and installs `openssh-server`                                     |
-| `sudo-nopasswd` | grants the current user passwordless sudo via `/etc/sudoers.d`, validated by `visudo`                                       |
-| `base`          | installs the prereqs chezmoi and the dotfiles need: `git`, `curl`, `ca-certificates`, `gh`, `claude`                        |
-| `tailscale`     | installs tailscale and enables `tailscaled` (does **not** run `tailscale up`)                                               |
+So a **fork of this repo Just Works for the fork owner** without editing the script. Override either by exporting `CHEZMOI_NAME`/`CHEZMOI_EMAIL` (or `GH_USER`) before running, or by setting `git config --global user.name|email` first. To bootstrap from a fork, set `REPO=<owner>/<repo>` in the env and use the matching `raw.githubusercontent.com` URL.
+
+On Linux the wrapper additionally runs bootstrap modules from [`scripts/linux/`](scripts/linux/) before the apply:
+
+| module          | what it does                                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `ssh-keys`      | syncs keys from `https://github.com/<gh-user>.keys` (derived from source remote) into `~/.ssh/authorized_keys`         |
+| `harden-sshd`   | drops a hardened `sshd_config.d/` snippet (key-only auth) and installs `openssh-server`                                |
+| `sudo-nopasswd` | grants the current user passwordless sudo via `/etc/sudoers.d`, validated by `visudo`                                  |
+| `base`          | installs the remaining prereqs: `gh`, `claude` (curl/ca-certificates/git already installed by `install.sh`'s apt prep) |
+| `tailscale`     | installs tailscale and enables `tailscaled` (does **not** run `tailscale up`)                                          |
 
 After it finishes:
 
@@ -42,7 +47,7 @@ bash ~/.local/share/chezmoi/scripts/linux/setup.sh ssh-keys
 
 ### ⚠️ If you are SSH'd in over password right now
 
-`harden-sshd` disables password authentication. Existing sessions persist, but new logins will require a key. **Make sure your key is in `https://github.com/$GH_USER.keys` (default `jasonluther`; export `GH_USER=youruser` before running to override) or run from console.** Otherwise you can lock yourself out if the script fails between sshd reload and `ssh-keys` running.
+`harden-sshd` disables password authentication. Existing sessions persist, but new logins will require a key. **Make sure your key is in `https://github.com/<gh-user>.keys` (the GitHub user is auto-derived from the source repo's `origin` remote; override with `GH_USER=youruser`) or run from console.** Otherwise you can lock yourself out if the script fails between sshd reload and `ssh-keys` running.
 
 ### Skip the wrapper
 
