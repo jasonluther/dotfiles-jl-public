@@ -10,7 +10,6 @@ README.md
 install.sh
 copier.yml
 docs/
-bootstrap/
 templates/
 
 {{ if ne .chezmoi.os "darwin" }}

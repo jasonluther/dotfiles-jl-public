@@ -18,13 +18,15 @@ The `bash -c "$(...)"` form fully downloads the body before bash starts parsing 
 
 On either OS the wrapper installs chezmoi (if missing) and runs `chezmoi apply`. You'll be prompted for a git name and email on first run.
 
-On Linux it additionally runs bootstrap modules from [`bootstrap/linux/`](bootstrap/linux/) before the apply:
+On Linux it additionally runs bootstrap modules from [`scripts/linux/`](scripts/linux/) before the apply:
 
-| module      | what it does                                                                                                                |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `base`      | drops a hardened `sshd_config.d/` snippet (key-only auth), installs `openssh-server`, `git`, `curl`, `gh`                   |
-| `ssh-keys`  | syncs keys from `https://github.com/$GH_USER.keys` (default `jasonluther`) into `~/.ssh/authorized_keys` (revocation-aware) |
-| `tailscale` | installs tailscale and enables `tailscaled` (does **not** run `tailscale up`)                                               |
+| module          | what it does                                                                                                                |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `ssh-keys`      | syncs keys from `https://github.com/$GH_USER.keys` (default `jasonluther`) into `~/.ssh/authorized_keys` (revocation-aware) |
+| `harden-sshd`   | drops a hardened `sshd_config.d/` snippet (key-only auth) and installs `openssh-server`                                     |
+| `sudo-nopasswd` | grants the current user passwordless sudo via `/etc/sudoers.d`, validated by `visudo`                                       |
+| `base`          | installs the prereqs chezmoi and the dotfiles need: `git`, `curl`, `ca-certificates`, `gh`, `claude`                        |
+| `tailscale`     | installs tailscale and enables `tailscaled` (does **not** run `tailscale up`)                                               |
 
 After it finishes:
 
@@ -35,12 +37,12 @@ sudo tailscale up --ssh
 To re-run a subset of modules later:
 
 ```sh
-bash ~/.local/share/chezmoi/bootstrap/linux/setup.sh ssh-keys
+bash ~/.local/share/chezmoi/scripts/linux/setup.sh ssh-keys
 ```
 
 #### ⚠️ If you are SSH'd in over password right now
 
-`base` disables password authentication. Existing sessions persist, but new logins will require a key. **Make sure your key is in `https://github.com/$GH_USER.keys` (default `jasonluther`; export `GH_USER=youruser` before running to override) or run from console.** Otherwise you can lock yourself out if the script fails between sshd reload and `ssh-keys` running.
+`harden-sshd` disables password authentication. Existing sessions persist, but new logins will require a key. **Make sure your key is in `https://github.com/$GH_USER.keys` (default `jasonluther`; export `GH_USER=youruser` before running to override) or run from console.** Otherwise you can lock yourself out if the script fails between sshd reload and `ssh-keys` running.
 
 ### Skip the wrapper
 

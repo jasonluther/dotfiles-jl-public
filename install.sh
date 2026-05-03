@@ -11,8 +11,8 @@
 # parsing — a dropped connection cannot run a truncated script.
 #
 # On Linux the script also runs apt prep, sshd hardening, GitHub-key sync,
-# and tailscale install before applying chezmoi (see bootstrap/linux/).
-# Optional positional args on Linux are forwarded to bootstrap/linux/setup.sh
+# and tailscale install before applying chezmoi (see scripts/linux/).
+# Optional positional args on Linux are forwarded to scripts/linux/setup.sh
 # as module names.
 
 set -euo pipefail
@@ -63,7 +63,7 @@ fi
 
 if ((is_linux)); then
   echo "==> Running Linux bootstrap modules..."
-  bash "$CHEZMOI_SRC/bootstrap/linux/setup.sh" "$@"
+  bash "$CHEZMOI_SRC/scripts/linux/setup.sh" "$@"
 fi
 
 echo "==> chezmoi apply..."

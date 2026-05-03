@@ -4,21 +4,17 @@
 # Invoked by ../../install.sh on Linux hosts. Can also be re-run directly
 # from the chezmoi source dir to re-apply a subset of modules:
 #
-#   bash ~/.local/share/chezmoi/bootstrap/linux/setup.sh ssh-keys
+#   bash ~/.local/share/chezmoi/scripts/linux/setup.sh ssh-keys
 #
-# Modules are scripts in modules/ named <name>.sh. Each must be idempotent
-# and may rely on $REPO_DIR pointing at this directory.
+# Each module is a sibling script named <name>.sh and must be idempotent.
 
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MODULES_DIR="$REPO_DIR/modules"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Order matters: ssh-keys runs before base so authorized_keys is populated
-# before base.sh hardens sshd (PasswordAuthentication=no). On a re-run where
-# openssh-server is already installed, this prevents a window where keys
-# haven't synced yet but password auth is already off.
-DEFAULT_MODULES=(ssh-keys base tailscale)
+# Order matters: ssh-keys must populate authorized_keys before harden-sshd
+# disables password auth, otherwise a fresh host would refuse all logins.
+DEFAULT_MODULES=(ssh-keys harden-sshd sudo-nopasswd base tailscale)
 
 modules=("$@")
 if [[ ${#modules[@]} -eq 0 ]]; then
@@ -30,13 +26,13 @@ for m in "${modules[@]}"; do
     echo "error: invalid module name '$m' (allowed: lowercase letters, digits, hyphen)" >&2
     exit 1
   fi
-  script="$MODULES_DIR/${m}.sh"
+  script="$SCRIPT_DIR/${m}.sh"
   if [[ ! -f "$script" ]]; then
     echo "error: unknown module '$m' (looked for $script)" >&2
     exit 1
   fi
   echo "==> $m"
-  REPO_DIR="$REPO_DIR" bash "$script"
+  bash "$script"
 done
 
 echo "✓ linux bootstrap complete"
