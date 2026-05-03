@@ -33,9 +33,11 @@ VS Code user `settings.json` should include:
 
 ```json
 {
-  "editor.fontFamily": "MonaspaceNeon Nerd Font, MonaspaceNeon, Menlo, monospace",
-  "editor.fontLigatures": "'calt', 'liga', 'ss01', 'ss02', 'ss03', 'ss04', 'ss05', 'ss06', 'ss07', 'ss08'",
-  "terminal.integrated.fontFamily": "MonaspaceArgon Nerd Font, MonaspaceArgon, Menlo, monospace",
+  "editor.fontFamily": "'Geist Mono', Menlo, monospace",
+  "editor.fontWeight": "300",
+  "editor.fontLigatures": true,
+  "terminal.integrated.fontFamily": "'Geist Mono', Menlo, monospace",
+  "terminal.integrated.fontWeight": "300",
   "python.defaultInterpreterPath": ".venv/bin/python",
   "editor.formatOnSave": true,
   "[python]": {
@@ -51,17 +53,15 @@ VS Code user `settings.json` should include:
 
 ## Fonts
 
-[Monaspace](https://monaspace.githubnext.com/) is the recommended font family. Both casks are pinned in the public `Brewfile`:
+[Geist Mono](https://vercel.com/font) is the current pick — clean, modern, lighter feel than Monaspace at weight 300.
 
-- `font-monaspace` — base family (5 styles: Neon, Argon, Xenon, Radon, Krypton)
-- `font-monaspace-nerd-font` — patched variant with Nerd Font glyphs for icons in shell prompts (starship, etc.)
+The public `Brewfile` pins a small set of monospaced font casks so any of them can be tried by swapping `editor.fontFamily` / `terminal.integrated.fontFamily`:
 
-Pairing convention used in this dotfiles repo:
-
-- **Editor:** Monaspace Neon (clean, neutral)
-- **Terminal:** Monaspace Argon (slight humanist warmth, easier for long sessions)
-
-Both ship the texture-healing ligatures (the `ss01`–`ss08` features in `editor.fontLigatures` above).
+- `font-geist-mono` — current default
+- `font-jetbrains-mono` — strong fallback candidate
+- `font-ibm-plex-mono` — refined, has very light weights
+- `font-commit-mono`, `font-iosevka`, `font-maple-mono` — additional options
+- `font-monaspace`, `font-monaspace-nerd-font` — kept available; Nerd Font variant provides icon glyphs for shell prompts (starship, etc.)
 
 ## Open questions
 
