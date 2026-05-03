@@ -1,28 +1,6 @@
 #!/usr/bin/env bash
-# Install global npm packages from packages/npm.txt.
-# `npm install -g` is idempotent (reinstalls/updates each run).
+# Thin wrapper for scripts/install-npm.sh.
 #
 # npm.txt hash: {{ include "packages/npm.txt" | sha256sum }}
 
-set -euo pipefail
-
-list={{ joinPath .chezmoi.sourceDir "packages/npm.txt" | quote }}
-[[ -f "$list" ]] || exit 0
-
-if ! command -v npm >/dev/null 2>&1; then
-  echo "npm not on PATH; skipping npm.txt" >&2
-  exit 0
-fi
-
-pkgs=()
-while IFS= read -r line; do
-  line="${line%%#*}"
-  line="${line#"${line%%[![:space:]]*}"}"
-  line="${line%"${line##*[![:space:]]}"}"
-  [[ -n "$line" ]] && pkgs+=("$line")
-done < "$list"
-
-if [[ ${#pkgs[@]} -gt 0 ]]; then
-  echo "==> npm install -g (${#pkgs[@]} packages)"
-  npm install -g "${pkgs[@]}"
-fi
+exec {{ joinPath .chezmoi.sourceDir "scripts/install-npm.sh" | quote }}

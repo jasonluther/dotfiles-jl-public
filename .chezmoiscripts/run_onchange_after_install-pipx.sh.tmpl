@@ -1,31 +1,6 @@
 #!/usr/bin/env bash
-# Install Python CLI tools from packages/pipx.txt via pipx.
-# Skips entries already installed; new entries get pipx install on next run.
+# Thin wrapper for scripts/install-pipx.sh.
 #
 # pipx.txt hash: {{ include "packages/pipx.txt" | sha256sum }}
 
-set -euo pipefail
-
-list={{ joinPath .chezmoi.sourceDir "packages/pipx.txt" | quote }}
-[[ -f "$list" ]] || exit 0
-
-if ! command -v pipx >/dev/null 2>&1; then
-  echo "pipx not on PATH; skipping pipx.txt" >&2
-  exit 0
-fi
-
-installed=$(pipx list --short 2>/dev/null | awk '{print $1}')
-
-while IFS= read -r line; do
-  line="${line%%#*}"
-  line="${line#"${line%%[![:space:]]*}"}"
-  line="${line%"${line##*[![:space:]]}"}"
-  [[ -z "$line" ]] && continue
-  # Strip any version spec (==, >=, ~=, etc.) for the installed-check.
-  name="${line%%[<>=~!]*}"
-  if echo "$installed" | grep -qx "$name"; then
-    continue
-  fi
-  echo "==> pipx install $line"
-  pipx install "$line"
-done < "$list"
+exec {{ joinPath .chezmoi.sourceDir "scripts/install-pipx.sh" | quote }}

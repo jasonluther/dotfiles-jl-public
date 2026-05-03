@@ -1,6 +1,7 @@
 # Source-only assets — chezmoi scripts read these from the source dir,
 # they should never be deployed into $HOME.
 packages/
+scripts/
 Brewfile
 mas.txt
 
