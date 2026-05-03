@@ -1,0 +1,5 @@
+# PlatformIO platforms to install via `pio pkg install --global -p <name>`.
+# Format: one platform name per line. Blank lines and `#` comments allowed.
+#
+# Hardware-specific stuff lives in dotfiles-jl (private) — this file is just
+# the cross-platform scaffolding.

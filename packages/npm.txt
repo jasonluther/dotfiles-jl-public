@@ -1,0 +1,5 @@
+# Global npm packages installed via `npm install -g`.
+# Format: one package spec per line. Blank lines and `#` comments allowed.
+#
+# Node is installed via Brewfile (macOS) or apt (`nodejs` package on Debian
+# — add to apt.txt + apt-aliases.txt when needed).

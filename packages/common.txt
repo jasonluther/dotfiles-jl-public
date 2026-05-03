@@ -1,0 +1,28 @@
+# Cross-platform CLI tools — installed via brew on macOS, apt on Debian.
+# Format: one package name per line. Blank lines and `#` comments allowed.
+#
+# Names listed here must be the brew formula name. Where the apt package
+# name differs, add a mapping in apt-aliases.txt.
+#
+# Stuff that's mac-only or has no clean apt equivalent stays in Brewfile.
+
+awscli
+bat
+clang-format
+cmake
+direnv
+dos2unix
+fswatch
+fzf
+gh
+git
+jq
+pipx
+ripgrep
+ruff
+shfmt
+tldr
+tmux
+tree
+watchexec
+zoxide

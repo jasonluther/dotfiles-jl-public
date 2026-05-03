@@ -1,0 +1,8 @@
+# Name mapping for packages whose apt name differs from their brew name.
+# Format: <brew_name>=<apt_name>, one per line. Blank lines / `#` comments OK.
+#
+# The install script reads this when translating common.txt for apt-get.
+# Example entries (uncomment if/when the brew name moves into common.txt):
+# fd=fd-find
+# node=nodejs
+# go=golang-go
