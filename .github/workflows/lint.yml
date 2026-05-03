@@ -59,7 +59,14 @@ jobs:
     runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v6
-      - run: sudo apt-get install -y --no-install-recommends zsh
+      # Self-hosted runners typically already have zsh; only sudo-install on
+      # hosted runners (ubuntu-latest) where zsh isn't part of the image.
+      - name: Ensure zsh is available
+        run: |
+          if ! command -v zsh >/dev/null; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends zsh
+          fi
       - name: zsh -n (parser-only check)
         run: |
           shopt -s nullglob
