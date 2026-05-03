@@ -57,8 +57,19 @@ if [[ ! -d "$CHEZMOI_SRC/.git" ]]; then
 else
   current_url="$(git -C "$CHEZMOI_SRC" remote get-url origin 2>/dev/null || true)"
   if [[ "$current_url" != "$EXPECTED_URL" && "$current_url" != "git@github.com:$REPO.git" ]]; then
-    echo "==> chezmoi source remote is '$current_url', expected '$EXPECTED_URL' — re-initializing..."
-    chezmoi init --force "$REPO"
+    # `chezmoi init` skips cloning when the source dir already exists, so
+    # `--force` alone won't swap remotes. Refuse to wipe a dirty tree;
+    # otherwise move it aside and re-clone.
+    if ! git -C "$CHEZMOI_SRC" diff --quiet HEAD 2>/dev/null ||
+      [[ -n "$(git -C "$CHEZMOI_SRC" status --porcelain 2>/dev/null)" ]]; then
+      echo "error: chezmoi source at $CHEZMOI_SRC points at '$current_url' (expected '$EXPECTED_URL') and has uncommitted changes." >&2
+      echo "       Resolve manually, then re-run." >&2
+      exit 1
+    fi
+    backup="$CHEZMOI_SRC.bak.$(date +%Y%m%d%H%M%S)"
+    echo "==> chezmoi source remote is '$current_url', expected '$EXPECTED_URL' — moving to $backup and re-initializing..."
+    mv "$CHEZMOI_SRC" "$backup"
+    chezmoi init "$REPO"
   else
     echo "==> chezmoi update (pull only, no apply yet)..."
     chezmoi update --apply=false
