@@ -94,10 +94,5 @@ if ((is_linux)); then
 Next steps on Linux:
 
   sudo tailscale up --ssh
-
-If a private overlay applies to this machine, layer it now:
-
-  git clone git@github.com:jasonluther/dotfiles-jl.git ~/.local/share/chezmoi-private
-  ~/.local/share/chezmoi-private/private_dot_local/bin/executable_dotfiles-bootstrap
 EOF
 fi

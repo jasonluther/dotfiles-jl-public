@@ -1,0 +1,139 @@
+{
+  "files.associations": {
+    "*.cps": "javascript",
+    "*.md": "markdown",
+    "*.yml": "yaml",
+    "*.yaml": "yaml",
+    ".env*": "dotenv",
+    "*.hpp": "cpp",
+    "*.c": "cpp",
+    "*.cpp": "cpp",
+    "*.h": "cpp"
+  },
+  "git.confirmSync": false,
+  "[xml]": {
+    "editor.defaultFormatter": "redhat.vscode-xml"
+  },
+  "workbench.colorTheme": "Dark Modern",
+  "editor.fontFamily": "'Geist Mono', Menlo, monospace",
+  "editor.fontWeight": "300",
+  "editor.fontLigatures": true,
+  "terminal.integrated.fontFamily": "'Geist Mono', Menlo, monospace",
+  "terminal.integrated.fontWeight": "300",
+  "terminal.integrated.fontLigatures.enabled": true,
+  "editor.minimap.enabled": false,
+  "git.autofetch": true,
+  "redhat.telemetry.enabled": false,
+  "cSpell.enabled": false,
+  "cSpell.customDictionaries": {
+    "personal-words": {
+      "name": "personal-words",
+      "path": "~/.config/cspell/personal-words.txt",
+      "addWords": true,
+      "scope": "user"
+    }
+  },
+  "auto-build.defaultEnv.name": "at90usb1286_dfu",
+  "editor.wordWrapColumn": 72,
+  "editor.wordWrap": "on",
+  "window.zoomLevel": 2,
+  "python.analysis.extraPaths": ["${workspaceFolder}/src"],
+  "python.terminal.activateEnvInCurrentTerminal": true,
+  "python.locator": "native",
+  "python.createEnvironment.trigger": "off",
+  "python.analysis.typeCheckingMode": "basic",
+  "[python]": {
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit",
+      "source.fixAll": "explicit"
+    },
+    "editor.autoIndent": "advanced",
+    "editor.formatOnType": true,
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true
+  },
+  "ruff.lineLength": 79,
+  "ruff.lint.enable": true,
+  "yaml.format.singleQuote": true,
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "vscode.html-language-features"
+  },
+  "git.openRepositoryInParentFolders": "always",
+  "github.copilot.editor.enableAutoCompletions": true,
+  "rewrap.autoWrap.enabled": true,
+  "rewrap.wrappingColumn": 72,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "never",
+    "source.organizeImports": "explicit",
+    "source.fixAll": "explicit"
+  },
+  "workbench.enableExperiments": false,
+  "makefile.configureOnOpen": true,
+  "github.copilot.enable": {
+    "*": true,
+    "plaintext": false,
+    "markdown": false,
+    "scminput": false
+  },
+  "cmake.pinnedCommands": [
+    "workbench.action.tasks.configureTaskRunner",
+    "workbench.action.tasks.runTask"
+  ],
+  "cmake.showOptionsMovedNotification": false,
+  "cmake.options.statusBarVisibility": "compact",
+  "C_Cpp.autoAddFileAssociations": false,
+  "[jinja]": {
+    "editor.wordWrap": "off"
+  },
+  "githubPullRequests.createOnPublishBranch": "never",
+  "github.copilot.nextEditSuggestions.enabled": true,
+  "[markdown]": {
+    "editor.defaultFormatter": "DavidAnson.vscode-markdownlint",
+    "editor.fontFamily": "'Avenir Next', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif",
+    "editor.fontSize": 14,
+    "editor.lineHeight": 1.6,
+    "editor.wordWrap": "on",
+    "editor.quickSuggestions": false,
+    "editor.acceptSuggestionOnEnter": "off",
+    "editor.tabSize": 2
+  },
+  "markdown.preview.fontSize": 14,
+  "markdown.preview.fontFamily": "'Avenir Next', -apple-system, BlinkMacSystemFont, sans-serif",
+  "markdown.preview.lineHeight": 1.6,
+  "markdown.preview.scrollPreviewWithEditor": true,
+  "markdown.preview.scrollEditorWithPreview": true,
+  "markdown.preview.doubleClickToSwitchToEditor": true,
+  "docker.extension.enableComposeLanguageServer": false,
+  "docker.extension.dockerEngineAvailabilityPrompt": false,
+  "[dockercompose]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2,
+    "editor.autoIndent": "advanced",
+    "editor.quickSuggestions": {
+      "other": true,
+      "comments": false,
+      "strings": true
+    },
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "[github-actions-workflow]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "vale.valeCLI.config": "",
+  "vale.core.useCLI": true,
+  "explorer.confirmDelete": false,
+  "claudeCode.selectedModel": "default",
+  "claudeCode.preferredLocation": "panel",
+  "security.promptForLocalFileProtocolHandling": false,
+  "explorer.confirmDragAndDrop": false,
+  "editor.tokenColorCustomizations": {
+    "textMateRules": []
+  },
+  "dotenv.enableAutocloaking": false
+}

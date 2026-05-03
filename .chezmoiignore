@@ -18,4 +18,5 @@ templates/
 
 {{ if ne .chezmoi.os "darwin" }}
 Library/
+.config/cspell/
 {{ end }}

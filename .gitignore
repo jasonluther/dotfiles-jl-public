@@ -1,5 +1,4 @@
-.claude/settings.local.json
-.claude/worktrees/
+.claude/
 
 # Editor / OS
 .DS_Store
