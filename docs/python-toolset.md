@@ -60,7 +60,3 @@ VS Code user `settings.json` should include:
 - Aligns with the `pyright-lsp` Claude plugin already enabled in `private_dot_claude/settings.json.tmpl`.
 
 In `templates/python-uv-with-js/`, pyright is installed via `package.json` (the JS toolchain is already present). In `templates/python-uv/`, pyright is in `[dependency-groups].dev` so `uv run pyright` works without npm.
-
-## Open questions
-
-- `templates/python-uv/` should reference this doc in its README so forkers know the rationale.
