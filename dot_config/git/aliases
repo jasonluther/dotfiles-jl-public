@@ -5,9 +5,22 @@
 	co = checkout
 	cob = checkout -b
 	p = push
+	pf = push --force-with-lease
 	pl = pull
 	pu = push -u origin HEAD
 	undo = reset --soft HEAD~1
 	amend = commit --amend --no-edit
 	wip = !git add -A && git commit -m "WIP"
 	save = !git add -A && git commit -m "SAVEPOINT"
+
+	# Print the repo's main branch (handles main vs master).
+	main-branch = !git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@'
+
+	# Fetch origin and fast-forward local main without checking it out.
+	sync = !git fetch origin && git fetch origin $(git main-branch):$(git main-branch)
+
+	# Delete local branches that are merged into main.
+	bclean = !git branch --merged $(git main-branch) | grep -v "^\\*" | grep -v " $(git main-branch)$" | xargs -r git branch -d
+
+	# Remove local branches whose upstream is gone.
+	prune-local = !git fetch -p && git branch -vv | grep ': gone]' | awk '{print $1}' | xargs -r git branch -D
