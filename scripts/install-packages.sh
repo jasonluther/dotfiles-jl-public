@@ -29,7 +29,7 @@ read_list() {
     line="${line%%#*}"
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%"${line##*[![:space:]]}"}"
-    [[ -n "$line" ]] && eval "$arr_name+=(\"\$line\")"
+    if [[ -n "$line" ]]; then eval "$arr_name+=(\"\$line\")"; fi
   done <"$path"
 }
 
@@ -73,7 +73,7 @@ if [[ -f "$SRC/packages/apt-aliases.txt" ]]; then
     key="${key%"${key##*[![:space:]]}"}"
     val="${val#"${val%%[![:space:]]*}"}"
     val="${val%"${val##*[![:space:]]}"}"
-    [[ -n "$key" && -n "$val" ]] && alias_map["$key"]="$val"
+    if [[ -n "$key" && -n "$val" ]]; then alias_map["$key"]="$val"; fi
   done <"$SRC/packages/apt-aliases.txt"
 fi
 
@@ -84,14 +84,17 @@ done
 read_list apt_only "$SRC/packages/apt.txt"
 candidates+=("${apt_only[@]:-}")
 
-# Filter out packages that aren't in the local apt cache. Avoids a single
-# typo or distro-version mismatch failing the whole install.
+# Filter out packages that have no install candidate on this distro. Avoids
+# a single typo or distro-version mismatch failing the whole install.
+# `apt-cache show` returns 0 even for "ghost" packages with no candidate
+# (referenced by another package's metadata), so check `apt-cache policy`
+# for a real Candidate that isn't `(none)`.
 sudo apt-get update -y
 available=()
 skipped=()
 for pkg in "${candidates[@]}"; do
   [[ -z "$pkg" ]] && continue
-  if apt-cache show "$pkg" >/dev/null 2>&1; then
+  if apt-cache policy "$pkg" 2>/dev/null | grep -qE '^  Candidate: [^(]'; then
     available+=("$pkg")
   else
     skipped+=("$pkg")

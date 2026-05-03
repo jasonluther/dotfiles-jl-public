@@ -1,5 +1,25 @@
-{{- $name := promptStringOnce . "name" "Full name" -}}
-{{- $email := promptStringOnce . "email" "Email address" -}}
+{{/*
+  Identity is taken from CHEZMOI_NAME / CHEZMOI_EMAIL env vars, falling back
+  to `git config --global user.name` / `user.email`. If neither is set the
+  template fails loudly — no interactive prompt, so this works under
+  non-TTY installs (cloud-init, ssh, scripts).
+
+  Override:
+    CHEZMOI_NAME='Jane Doe' CHEZMOI_EMAIL=jane@example.com \
+      sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply jasonluther/dotfiles-jl-public
+*/ -}}
+
+{{- $name := env "CHEZMOI_NAME" -}}
+{{- if and (eq $name "") (lookPath "git") -}}
+{{-   $name = output "git" "config" "--global" "--default" "" "user.name" | trim -}}
+{{- end -}}
+{{- if eq $name "" -}}{{- fail "set CHEZMOI_NAME (or `git config --global user.name '<your name>'`) before running chezmoi init" -}}{{- end -}}
+
+{{- $email := env "CHEZMOI_EMAIL" -}}
+{{- if and (eq $email "") (lookPath "git") -}}
+{{-   $email = output "git" "config" "--global" "--default" "" "user.email" | trim -}}
+{{- end -}}
+{{- if eq $email "" -}}{{- fail "set CHEZMOI_EMAIL (or `git config --global user.email '<you@example.com>'`) before running chezmoi init" -}}{{- end -}}
 
 [data]
     name = {{ $name | quote }}
