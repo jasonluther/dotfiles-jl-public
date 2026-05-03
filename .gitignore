@@ -7,6 +7,9 @@
 *~
 .idea/
 
+# Syncthing sync conflicts
+*.sync-conflict-*
+
 # Python tooling caches
 .ruff_cache/
 .mypy_cache/
