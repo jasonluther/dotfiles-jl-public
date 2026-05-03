@@ -31,6 +31,11 @@ target-version = "py{{ python_version | replace('.', '') }}"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "{{ python_version }}"
+typeCheckingMode = "standard"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
