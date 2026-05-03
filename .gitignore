@@ -1,2 +1,23 @@
 .claude/settings.local.json
 .claude/worktrees/
+
+# Editor / OS
+.DS_Store
+*.swp
+*~
+.idea/
+
+# Python tooling caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Virtualenvs / node
+.venv/
+venv/
+node_modules/
+
+# Jupyter
+.ipynb_checkpoints/
