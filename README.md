@@ -24,11 +24,11 @@ The `bash -c "$(...)"` form fully downloads the body before bash starts parsing 
 
 In addition to the chezmoi apply, the Linux path runs bootstrap modules from [`bootstrap/linux/`](bootstrap/linux/):
 
-| module      | what it does                                                                                              |
-| ----------- | --------------------------------------------------------------------------------------------------------- |
-| `base`      | drops a hardened `sshd_config.d/` snippet (key-only auth), installs `openssh-server`, `git`, `curl`, `gh` |
-| `ssh-keys`  | syncs keys from `https://github.com/jasonluther.keys` into `~/.ssh/authorized_keys` (revocation-aware)    |
-| `tailscale` | installs tailscale and enables `tailscaled` (does **not** run `tailscale up`)                             |
+| module      | what it does                                                                                                                |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `base`      | drops a hardened `sshd_config.d/` snippet (key-only auth), installs `openssh-server`, `git`, `curl`, `gh`                   |
+| `ssh-keys`  | syncs keys from `https://github.com/$GH_USER.keys` (default `jasonluther`) into `~/.ssh/authorized_keys` (revocation-aware) |
+| `tailscale` | installs tailscale and enables `tailscaled` (does **not** run `tailscale up`)                                               |
 
 After it finishes:
 
@@ -44,7 +44,7 @@ bash ~/.local/share/chezmoi/bootstrap/linux/setup.sh ssh-keys
 
 #### ⚠️ If you are SSH'd in over password right now
 
-`base` disables password authentication. Existing sessions persist, but new logins will require a key. **Make sure your key is in `https://github.com/jasonluther.keys` before running, or run from console.** Otherwise you can lock yourself out if the script fails between sshd reload and `ssh-keys` running.
+`base` disables password authentication. Existing sessions persist, but new logins will require a key. **Make sure your key is in `https://github.com/$GH_USER.keys` (default `jasonluther`; export `GH_USER=youruser` before running to override) or run from console.** Otherwise you can lock yourself out if the script fails between sshd reload and `ssh-keys` running.
 
 ### Skip the wrapper
 
