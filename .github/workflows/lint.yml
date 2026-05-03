@@ -76,15 +76,16 @@ jobs:
       - uses: actions/checkout@v6
       # Use markdownlint-cli (not -cli2) because cli2 only accepts configs
       # with specific filenames; ours is named `dot_markdownlintrc` so chezmoi
-      # deploys it as `~/.markdownlintrc`.
-      - run: npm install -g markdownlint-cli@0.48.0
+      # deploys it as `~/.markdownlintrc`. `npx --yes` keeps this portable
+      # between hosted runners and self-hosted runners without sudo.
+      #
       # Slash-command definitions under private_dot_claude/commands/ are
       # instruction text consumed by Claude Code, not rendered docs — they
       # use intentional formatting (literal spaces inside backticks for git
       # status flags, trailing ellipses in headings, etc.) that fights
       # markdownlint's defaults.
       - run: |
-          markdownlint --config dot_markdownlintrc \
+          npx --yes markdownlint-cli@0.48.0 --config dot_markdownlintrc \
             --ignore 'templates/**' \
             --ignore '**/node_modules/**' \
             --ignore 'private_dot_claude/**' \
@@ -105,8 +106,12 @@ jobs:
         with:
           # trufflehog needs full history to scan past commits.
           fetch-depth: 0
-      - name: Install trufflehog
-        run: curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+      - name: Install trufflehog (user-local — no sudo needed on self-hosted runners)
+        run: |
+          install -d "$HOME/.local/bin"
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
+            | sh -s -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: trufflehog git --no-update --results=verified,unverified --fail file://.
 
   ruff:
