@@ -8,3 +8,5 @@ adafruit-nrfutil
 esphome
 esptool
 platformio
+ruff
+tldr

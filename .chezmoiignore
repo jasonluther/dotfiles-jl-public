@@ -12,10 +12,10 @@ copier.yml
 docs/
 templates/
 
+# macOS-only .chezmoiscripts/* gate themselves inside the template with
+# an `eq .chezmoi.os "darwin"` check — chezmoiignore does not apply to
+# .chezmoiscripts.
+
 {{ if ne .chezmoi.os "darwin" }}
 Library/
-.chezmoiscripts/run_onchange_after_configure-defaults.sh
-.chezmoiscripts/run_onchange_after_enable-touch-id-sudo.sh
-.chezmoiscripts/run_onchange_after_install-mas-apps.sh
-.chezmoiscripts/run_onchange_after_setup-python.sh
 {{ end }}
