@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Install base packages (git, gh, openssh-server) with hardened sshd config.
 #
-# Order matters: the sshd_config drop-in is written *before* openssh-server is
-# installed, so the daemon's first start uses PasswordAuthentication=no. There
-# is therefore no window in which sshd accepts password logins.
+# Order matters two ways:
+#   1. setup.sh runs ssh-keys before base so ~/.ssh/authorized_keys is populated
+#      before sshd gets PasswordAuthentication=no. The check below enforces that.
+#   2. The sshd_config drop-in is written *before* openssh-server is installed,
+#      so the daemon's first start uses PasswordAuthentication=no — there is no
+#      window in which a fresh sshd accepts password logins.
 
 set -euo pipefail
 
@@ -24,6 +27,17 @@ sudo install -m 0440 -o root -g root "$sudoers_tmp" /etc/sudoers.d/jason-nopassw
 # Refuse non-fast-forward pulls — surfaces divergence instead of silently
 # creating merge commits.
 git config --global pull.ff only
+
+# Refuse to harden sshd if there are no keys to log in with. setup.sh runs
+# ssh-keys before base for this reason; if base is invoked standalone before
+# keys are synced, abort instead of locking ourselves out. ALLOW_NO_KEYS=1
+# bypasses the check (e.g. console-only hosts where SSH is unused).
+authorized="$HOME/.ssh/authorized_keys"
+if [[ "${ALLOW_NO_KEYS:-0}" != "1" ]] && [[ ! -s "$authorized" ]]; then
+  echo "error: $authorized is empty or missing — refusing to disable password auth." >&2
+  echo "       Run the ssh-keys module first, or set ALLOW_NO_KEYS=1 to override." >&2
+  exit 1
+fi
 
 # Pre-stage hardened sshd config so the daemon never starts with defaults.
 # Filename kept as 00-first-time.conf for back-compat with hosts originally

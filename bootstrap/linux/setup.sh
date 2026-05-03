@@ -14,7 +14,11 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULES_DIR="$REPO_DIR/modules"
 
-DEFAULT_MODULES=(base ssh-keys tailscale)
+# Order matters: ssh-keys runs before base so authorized_keys is populated
+# before base.sh hardens sshd (PasswordAuthentication=no). On a re-run where
+# openssh-server is already installed, this prevents a window where keys
+# haven't synced yet but password auth is already off.
+DEFAULT_MODULES=(ssh-keys base tailscale)
 
 modules=("$@")
 if [[ ${#modules[@]} -eq 0 ]]; then
