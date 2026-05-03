@@ -22,10 +22,12 @@ nmap
 pandoc
 pipx
 ripgrep
-ruff
 shfmt
-tldr
 tmux
 tree
-watchexec
 zoxide
+
+# Best-effort on Linux — older Debian/Ubuntu lack a watchexec apt package.
+# install-packages.sh will report it as skipped; install via cargo or the
+# upstream .deb release if you need it.
+watchexec
