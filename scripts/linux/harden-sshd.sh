@@ -18,10 +18,7 @@ if [[ "${ALLOW_NO_KEYS:-0}" != "1" ]] && [[ ! -s "$authorized" ]]; then
   exit 1
 fi
 
-# Filename kept as 00-first-time.conf for back-compat with hosts originally
-# bootstrapped via the (now-retired) jasonluther/first-time repo — renaming
-# would orphan the existing drop-in and leave it shadowing this one.
-conf=/etc/ssh/sshd_config.d/00-first-time.conf
+conf=/etc/ssh/sshd_config.d/00-hardening.conf
 
 sudo install -d -m 0755 /etc/ssh/sshd_config.d
 sudo tee "$conf" >/dev/null <<'EOF'
@@ -31,6 +28,11 @@ PermitRootLogin prohibit-password
 KbdInteractiveAuthentication no
 EOF
 sudo chmod 0644 "$conf"
+
+# Remove the legacy filename from hosts originally bootstrapped via the
+# retired jasonluther/first-time repo. Two drop-ins with identical content
+# both work, but the duplicate is confusing on `ls`.
+sudo rm -f /etc/ssh/sshd_config.d/00-first-time.conf
 
 sudo apt-get install -y --no-install-recommends openssh-server
 
