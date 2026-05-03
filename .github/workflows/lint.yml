@@ -15,9 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      # action-shellcheck auto-discovers shell scripts by shebang. We exclude:
-      #  - .chezmoiscripts/  → bash + Jinja templating, won't parse as plain bash
+      # action-shellcheck auto-discovers shell scripts. We exclude:
+      #  - .chezmoiscripts/         → bash + Jinja templating, won't parse as plain bash
       #  - dot_config/shell/, dot_zshrc, dot_zprofile → zsh, which shellcheck does not support
+      #  - private_dot_claude/hooks/ → Python scripts that happen to use a `.sh` extension
+      #                                (chezmoi deploys them as ~/.claude/hooks/*.sh).
       - uses: ludeeus/action-shellcheck@2.0.0
         env:
           # SC1091: skip "source file not found" — sources resolve at $HOME at runtime.
@@ -26,6 +28,7 @@ jobs:
           ignore_paths: >-
             .chezmoiscripts
             dot_config/shell
+            private_dot_claude/hooks
           ignore_names: >-
             dot_zshrc
             dot_zprofile
@@ -54,13 +57,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: DavidAnson/markdownlint-cli2-action@v20
-        with:
-          config: dot_markdownlintrc
-          globs: |
-            **/*.md
-            !templates/**
-            !**/node_modules/**
+      # Use markdownlint-cli (not -cli2) because cli2 only accepts configs
+      # with specific filenames; ours is named `dot_markdownlintrc` so chezmoi
+      # deploys it as `~/.markdownlintrc`.
+      - run: npm install -g markdownlint-cli@0.48.0
+      - run: |
+          markdownlint --config dot_markdownlintrc \
+            --ignore 'templates/**' \
+            --ignore '**/node_modules/**' \
+            '**/*.md'
 
   actionlint:
     runs-on: ubuntu-latest
