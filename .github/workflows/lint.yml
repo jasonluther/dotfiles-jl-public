@@ -61,10 +61,16 @@ jobs:
       # with specific filenames; ours is named `dot_markdownlintrc` so chezmoi
       # deploys it as `~/.markdownlintrc`.
       - run: npm install -g markdownlint-cli@0.48.0
+      # Slash-command definitions under private_dot_claude/commands/ are
+      # instruction text consumed by Claude Code, not rendered docs — they
+      # use intentional formatting (literal spaces inside backticks for git
+      # status flags, trailing ellipses in headings, etc.) that fights
+      # markdownlint's defaults.
       - run: |
           markdownlint --config dot_markdownlintrc \
             --ignore 'templates/**' \
             --ignore '**/node_modules/**' \
+            --ignore 'private_dot_claude/**' \
             '**/*.md'
 
   actionlint:
