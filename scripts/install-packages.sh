@@ -87,14 +87,19 @@ candidates+=("${apt_only[@]:-}")
 # Filter out packages that have no install candidate on this distro. Avoids
 # a single typo or distro-version mismatch failing the whole install.
 # `apt-cache show` returns 0 even for "ghost" packages with no candidate
-# (referenced by another package's metadata), so check `apt-cache policy`
-# for a real Candidate that isn't `(none)`.
+# (referenced by another package's metadata), so parse `apt-cache policy`
+# for a real Candidate that isn't `(none)`. Capture the output instead of
+# piping to `grep -q` — under `set -o pipefail`, grep's early exit sends
+# SIGPIPE to apt-cache and the whole pipeline returns 141, which would
+# cause this loop to skip every package whose policy output is longer
+# than grep's read buffer (i.e. nearly all of them).
 sudo apt-get update -y
 available=()
 skipped=()
 for pkg in "${candidates[@]}"; do
   [[ -z "$pkg" ]] && continue
-  if apt-cache policy "$pkg" 2>/dev/null | grep -qE '^  Candidate: [^(]'; then
+  candidate=$(apt-cache policy "$pkg" 2>/dev/null | awk '/^  Candidate:/ {print $2; exit}')
+  if [[ -n "$candidate" && "$candidate" != "(none)" ]]; then
     available+=("$pkg")
   else
     skipped+=("$pkg")
