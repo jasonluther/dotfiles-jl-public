@@ -13,9 +13,13 @@ on:
       - templates/**
       - .github/workflows/scaffold-precommit.yml
 
+# Self-hosted toggle: set vars.RUNS_ON to 'self-hosted' to route to local runners.
+#   gh variable set RUNS_ON --body 'self-hosted' -R jasonluther/dotfiles-jl-public
+#   gh variable set RUNS_ON --body 'ubuntu-latest' -R jasonluther/dotfiles-jl-public  # revert
+
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
