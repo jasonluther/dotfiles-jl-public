@@ -4,8 +4,6 @@
 
 set -euo pipefail
 
-[[ "$(uname -s)" == "Darwin" ]] || exit 0
-
 if ! command -v pyenv >/dev/null 2>&1; then
   echo "pyenv not on PATH; install via brew first." >&2
   exit 0

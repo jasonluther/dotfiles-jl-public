@@ -4,8 +4,6 @@
 
 set -euo pipefail
 
-[[ "$(uname -s)" == "Darwin" ]] || exit 0
-
 # Dock
 defaults write com.apple.dock autohide -bool true
 defaults write com.apple.dock show-recents -bool false

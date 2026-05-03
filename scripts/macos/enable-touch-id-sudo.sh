@@ -13,8 +13,6 @@
 
 set -euo pipefail
 
-[[ "$(uname -s)" == "Darwin" ]] || exit 0
-
 SUDO_LOCAL="/etc/pam.d/sudo_local"
 
 if [ -f "$SUDO_LOCAL" ] && grep -q "pam_tid.so" "$SUDO_LOCAL"; then

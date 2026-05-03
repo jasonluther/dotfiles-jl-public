@@ -8,9 +8,7 @@
 
 set -euo pipefail
 
-[[ "$(uname -s)" == "Darwin" ]] || exit 0
-
-SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 mas_file="$SRC/mas.txt"
 
 [[ -f "$mas_file" ]] || exit 0

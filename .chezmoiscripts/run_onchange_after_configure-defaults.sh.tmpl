@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Thin wrapper for scripts/macos/configure-defaults.sh.
+# run_onchange_: re-runs whenever the wrapped script's content changes.
+#
+# script hash: {{ include "scripts/macos/configure-defaults.sh" | sha256sum }}
+
+exec {{ joinPath .chezmoi.sourceDir "scripts/macos/configure-defaults.sh" | quote }}

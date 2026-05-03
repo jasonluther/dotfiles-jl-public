@@ -15,4 +15,8 @@ templates/
 
 {{ if ne .chezmoi.os "darwin" }}
 Library/
+.chezmoiscripts/run_onchange_after_configure-defaults.sh
+.chezmoiscripts/run_onchange_after_enable-touch-id-sudo.sh
+.chezmoiscripts/run_onchange_after_install-mas-apps.sh
+.chezmoiscripts/run_onchange_after_setup-python.sh
 {{ end }}

@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-# Thin wrapper for scripts/enable-touch-id-sudo.sh.
+# Thin wrapper for scripts/macos/enable-touch-id-sudo.sh.
 
-exec {{ joinPath .chezmoi.sourceDir "scripts/enable-touch-id-sudo.sh" | quote }}
+exec {{ joinPath .chezmoi.sourceDir "scripts/macos/enable-touch-id-sudo.sh" | quote }}

@@ -4,25 +4,21 @@ Jason Luther's portable dotfiles. Works on a fresh macOS or apt-based Linux mach
 
 ## Install
 
-### macOS
+`install.sh` detects macOS vs apt-based Linux and does the right thing for each. Use whichever downloader is on the box — `curl` is preinstalled on macOS; `wget` is preinstalled on minimal Debian and `curl` often isn't:
 
 ```sh
+# curl
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/jasonluther/dotfiles-jl-public/main/install.sh)"
-```
 
-Installs chezmoi (if missing) and applies the dotfiles. You'll be prompted for a git name and email on first run.
-
-### Linux (apt-based)
-
-`wget` is preinstalled on minimal Debian; `curl` often isn't. Either works:
-
-```sh
+# wget
 bash -c "$(wget -qO- https://raw.githubusercontent.com/jasonluther/dotfiles-jl-public/main/install.sh)"
 ```
 
 The `bash -c "$(...)"` form fully downloads the body before bash starts parsing — a dropped connection cannot run a truncated script.
 
-In addition to the chezmoi apply, the Linux path runs bootstrap modules from [`bootstrap/linux/`](bootstrap/linux/):
+On either OS the wrapper installs chezmoi (if missing) and runs `chezmoi apply`. You'll be prompted for a git name and email on first run.
+
+On Linux it additionally runs bootstrap modules from [`bootstrap/linux/`](bootstrap/linux/) before the apply:
 
 | module      | what it does                                                                                                                |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------- |

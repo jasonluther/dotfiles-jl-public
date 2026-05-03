@@ -1,4 +1,4 @@
-name: Templates smoke test
+name: Scaffold templates and run pre-commit
 
 on:
   push:
@@ -6,12 +6,12 @@ on:
     paths:
       - copier.yml
       - templates/**
-      - .github/workflows/templates-smoke.yml
+      - .github/workflows/scaffold-precommit.yml
   pull_request:
     paths:
       - copier.yml
       - templates/**
-      - .github/workflows/templates-smoke.yml
+      - .github/workflows/scaffold-precommit.yml
 
 jobs:
   smoke:

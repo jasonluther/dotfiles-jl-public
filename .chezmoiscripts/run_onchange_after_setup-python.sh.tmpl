@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Thin wrapper for scripts/setup-python.sh.
+# Thin wrapper for scripts/macos/setup-python.sh.
 #
 # Brewfile hash: {{ include "Brewfile" | sha256sum }}
 
-exec {{ joinPath .chezmoi.sourceDir "scripts/setup-python.sh" | quote }}
+exec {{ joinPath .chezmoi.sourceDir "scripts/macos/setup-python.sh" | quote }}

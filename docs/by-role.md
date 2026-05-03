@@ -33,7 +33,7 @@ This dotfiles repo is laid out flat at the chezmoi level (chezmoi requires this 
 - `mas.txt` — essential Mac App Store apps.
 - `.chezmoiscripts/run_onchange_before_install-packages.sh.tmpl` — Xcode CLI tools + `brew bundle`.
 - `.chezmoiscripts/run_onchange_after_install-mas-apps.sh.tmpl` — `mas install` per `mas.txt`.
-- `.chezmoiscripts/run_onchange_after_configure-macos-defaults.sh.tmpl` — `defaults write` for Finder, Dock, Terminal, etc.
+- `.chezmoiscripts/run_onchange_after_configure-defaults.sh.tmpl` — `defaults write` for Finder, Dock, Terminal, etc.
 - `.chezmoiscripts/run_onchange_after_enable-touch-id-sudo.sh.tmpl` — Touch ID for sudo via `/etc/pam.d/sudo_local`.
 - `.chezmoiscripts/run_onchange_after_setup-python.sh.tmpl` — pyenv-managed Python versions.
 - `.chezmoiscripts/run_once_after_setup-hardware-dev.py.tmpl` — Arduino CLI cores, PlatformIO, CircuitPython tools.
@@ -74,4 +74,4 @@ This dotfiles repo is laid out flat at the chezmoi level (chezmoi requires this 
 
 ## CI
 
-- `.github/workflows/templates-smoke.yml` — scaffold both copier flavors, run pre-commit twice (auto-fix then verify clean).
+- `.github/workflows/scaffold-precommit.yml` — scaffold both copier flavors, run pre-commit twice (auto-fix then verify clean).
