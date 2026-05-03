@@ -6,3 +6,8 @@
 # they need to run before chezmoi apply.
 
 build-essential
+# ARM Cortex-M cross-compiler. Used directly by arduino-cli; PlatformIO
+# projects targeting atmelsam/raspberrypi on arm64 Linux can opt into it
+# via `platform_packages = toolchain-gccarmnoneeabi @ symlink:///usr` in
+# platformio.ini (PlatformIO doesn't ship that toolchain for arm64 Linux).
+gcc-arm-none-eabi
