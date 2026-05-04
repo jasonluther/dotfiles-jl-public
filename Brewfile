@@ -31,6 +31,7 @@ brew "uv"
 brew "vale"
 brew "watch"
 brew "weasyprint"
+brew "wget"
 brew "xsv"
 brew "yq"
 
