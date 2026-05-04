@@ -107,7 +107,11 @@
     "editor.fontSize": 14,
     "editor.lineHeight": 1.6,
     "editor.wordWrap": "on",
-    "editor.quickSuggestions": false,
+    "editor.quickSuggestions": {
+      "comments": "off",
+      "strings": "off",
+      "other": "off"
+    },
     "editor.acceptSuggestionOnEnter": "off",
     "editor.tabSize": 2
   },
