@@ -66,6 +66,11 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply jasonluther/dotfiles-jl-pub
 - Claude Code commands, hooks, and base settings
 - VSCode user settings (incl. cspell custom-dictionary stub at `~/.config/cspell/personal-words.txt`)
 - Personal shell utilities under `~/.local/bin`
+- Auto fast-forward fetch of the chezmoi source repo on interactive shell
+  start (rate-limited to once every 6h, runs detached, never touches a
+  dirty tree). State and log live under `~/.local/state/chezmoi-autofetch/`
+  — `tail -f ~/.local/state/chezmoi-autofetch/log` to debug. To disable,
+  remove or empty `dot_config/shell/chezmoi-autofetch.sh` and re-apply.
 - Copier templates for new Python projects
 - On-demand hardware dev setup — run `setup-hardware-dev` to install/update arduino-cli, PlatformIO, AVR/ARM toolchains, esphome/esptool, and the cores/libraries listed in `packages/arduino-*.txt` and `packages/platformio.txt`. Not installed by default.
 - macOS Terminal.app profile (run `~/.local/share/chezmoi/scripts/macos/install-terminal-profile.sh` once with Terminal quit)
