@@ -2,6 +2,7 @@
 # Sourced from ~/.zshrc via the dot_config/shell/ fragment loader.
 
 # Useful aliases
+alias ls='ls -G'
 alias psg='ps axuw|grep'
 alias web-server='python3 -m http.server'
 alias root='cd $(git rev-parse --show-toplevel 2>/dev/null)'
