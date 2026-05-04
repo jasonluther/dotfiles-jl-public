@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Thin wrapper — re-runs scripts/install-packages.sh whenever any of the
+# manifest files change. Hash comments below drive chezmoi's onchange detect.
+#
+# common.txt   hash: {{ include "packages/common.txt" | sha256sum }}
+# apt.txt      hash: {{ include "packages/apt.txt" | sha256sum }}
+# apt-aliases  hash: {{ include "packages/apt-aliases.txt" | sha256sum }}
+{{- if eq .chezmoi.os "darwin" }}
+# Brewfile     hash: {{ include "Brewfile" | sha256sum }}
+{{- end }}
+
+exec {{ joinPath .chezmoi.sourceDir "scripts/install-packages.sh" | quote }}

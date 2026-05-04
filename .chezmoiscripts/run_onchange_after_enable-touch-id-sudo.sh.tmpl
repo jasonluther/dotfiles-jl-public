@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Thin wrapper for scripts/macos/enable-touch-id-sudo.sh.
+
+{{ if eq .chezmoi.os "darwin" -}}
+exec {{ joinPath .chezmoi.sourceDir "scripts/macos/enable-touch-id-sudo.sh" | quote }}
+{{- else -}}
+# macOS-only: skipped on {{ .chezmoi.os }}.
+{{- end }}

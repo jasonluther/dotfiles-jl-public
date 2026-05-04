@@ -1,0 +1,12 @@
+# Added by OrbStack: 'orb' SSH host for Linux machines
+# This only works if it's at the top of ssh_config (before any Host blocks).
+# This won't be added again if you remove it.
+Include ~/.ssh/config.d/*
+Include ~/.orbstack/ssh/config
+
+Host *
+{{- if eq .chezmoi.os "darwin" }}
+    IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+{{- end }}
+    ServerAliveInterval 60
+    ServerAliveCountMax 3

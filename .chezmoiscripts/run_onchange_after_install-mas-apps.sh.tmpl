@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Thin wrapper for scripts/macos/install-mas-apps.sh.
+#
+# mas.txt hash: {{ include "mas.txt" | sha256sum }}
+
+{{ if eq .chezmoi.os "darwin" -}}
+exec {{ joinPath .chezmoi.sourceDir "scripts/macos/install-mas-apps.sh" | quote }}
+{{- else -}}
+# macOS-only: skipped on {{ .chezmoi.os }}.
+{{- end }}

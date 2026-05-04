@@ -1,0 +1,12 @@
+# arduino-cli libraries. Format: one library name per line (as it appears in
+# the Arduino library index). Installed via `arduino-cli lib install` by
+# scripts/setup-arduino-cli.sh.
+
+Adafruit BusIO
+Adafruit GFX Library
+Adafruit NeoPixel
+Adafruit SSD1306
+ArduinoJson
+FastLED
+PubSubClient
+WiFiManager

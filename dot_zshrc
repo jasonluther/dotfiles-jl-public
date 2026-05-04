@@ -1,0 +1,39 @@
+# Add local bin to PATH (before venv activation so claude etc. are always available)
+export PATH="$HOME/.local/bin:$PATH"
+
+# 1Password SSH agent (only set if the socket exists)
+_OP_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+[[ -S "$_OP_SOCK" ]] && export SSH_AUTH_SOCK="$_OP_SOCK"
+unset _OP_SOCK
+
+# History
+HISTFILE="${XDG_STATE_HOME:-$HOME/.local/state}/zsh/history"
+[[ -d ${HISTFILE:h} ]] || mkdir -p "${HISTFILE:h}"
+HISTSIZE=50000
+SAVEHIST=50000
+setopt HIST_IGNORE_DUPS HIST_IGNORE_SPACE SHARE_HISTORY EXTENDED_HISTORY
+
+# Auto-activate/deactivate Python virtualenvs on cd
+source ~/.zsh/plugins/zsh-autoswitch-virtualenv/autoswitch_virtualenv.plugin.zsh
+
+# Pre-commit: don't stash unstaged changes
+export PRE_COMMIT_NO_STASH=1
+
+# macOS specifics
+export COPYFILE_DISABLE=true
+ulimit -n 10240
+
+# Load role-grouped shell fragments
+for _fragment in "$HOME/.config/shell"/*.sh; do
+  [ -r "$_fragment" ] && source "$_fragment"
+done
+unset _fragment
+
+eval "$(direnv hook zsh)"
+
+# Warn if dotfiles have drifted from chezmoi source
+if command -v chezmoi &>/dev/null; then
+  if [[ -n "$(chezmoi diff --exclude=scripts --no-pager 2>/dev/null)" ]]; then
+    echo "[dotfiles] Local changes detected. Run 'chezmoi diff' to review, 'chezmoi re-add' to keep, or 'chezmoi apply' to discard."
+  fi
+fi

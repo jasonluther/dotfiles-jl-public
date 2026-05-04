@@ -1,0 +1,22 @@
+# Source-only assets — chezmoi scripts read these from the source dir,
+# they should never be deployed into $HOME.
+packages/
+scripts/
+Brewfile
+mas.txt
+
+# Repo meta — present in source for the repo's own sake, not for $HOME.
+README.md
+install.sh
+copier.yml
+docs/
+templates/
+
+# macOS-only .chezmoiscripts/* gate themselves inside the template with
+# an `eq .chezmoi.os "darwin"` check — chezmoiignore does not apply to
+# .chezmoiscripts.
+
+{{ if ne .chezmoi.os "darwin" }}
+Library/
+.config/cspell/
+{{ end }}

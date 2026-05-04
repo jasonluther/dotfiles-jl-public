@@ -1,0 +1,8 @@
+# Python CLI tools installed in isolated venvs via pipx.
+# Format: one package spec per line. Blank lines and `#` comments allowed.
+# Specs may include version pins (e.g. `copier==9.*`) — pipx forwards them.
+#
+# Pipx itself is installed via common.txt (brew on macOS, apt on Debian).
+
+ruff
+tldr

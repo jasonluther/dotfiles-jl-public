@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""Create a git worktree + branch, run repo-specific setup, and launch Claude Code."""
+
+import subprocess
+import sys
+from pathlib import Path
+
+
+def die(msg: str) -> None:
+    print(msg, file=sys.stderr)
+    sys.exit(1)
+
+
+def git(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", *args], capture_output=True, text=True)
+
+
+def repo_root() -> Path:
+    r = git("rev-parse", "--show-toplevel")
+    if r.returncode != 0:
+        die("Not in a git repository")
+    return Path(r.stdout.strip())
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        die("Usage: start-work <branch-name> [claude prompt...]")
+
+    branch = sys.argv[1]
+    prompt = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else None
+
+    root = repo_root()
+    worktree = root.parent / f"{root.name}-{branch}"
+
+    if worktree.exists():
+        print(f"Resuming in existing worktree: {worktree}")
+    else:
+        # Create worktree and branch
+        r = git("worktree", "add", str(worktree), "-b", branch)
+        if r.returncode != 0:
+            die(f"git worktree add failed:\n{r.stderr.strip()}")
+
+        # Run a .start-work.sh if the repo provides one
+        local_setup = worktree / ".start-work.sh"
+        if local_setup.is_file():
+            print(f"Running {local_setup.name}")
+            subprocess.run(["bash", str(local_setup)], cwd=worktree)
+
+    # Derive session name: include PORT from .env if available
+    session_name = branch
+    env_file = worktree / ".env"
+    if env_file.is_file():
+        for line in env_file.read_text().splitlines():
+            if line.startswith("PORT="):
+                port = line.split("=", 1)[1].strip("'\"")
+                session_name = f"{branch}:{port}"
+                break
+
+    # Launch Claude Code
+    claude_cmd = ["claude", "--name", session_name]
+    if prompt:
+        claude_cmd.append(prompt)
+    subprocess.run(claude_cmd, cwd=worktree)
+
+
+if __name__ == "__main__":
+    main()

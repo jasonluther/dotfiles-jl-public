@@ -1,0 +1,89 @@
+# Local pre-commit gates that mirror .github/workflows/lint.yml.
+# Install once: `pre-commit install`.
+# Run on the whole repo: `pre-commit run --all-files`.
+#
+# Note: the templates under templates/ have their own pre-commit-config.yaml.jinja
+# rendered into scaffolded projects; this file is for the dotfiles repo itself.
+
+exclude: |
+  (?x)^(
+    \.git/|
+    \.ruff_cache/|
+    templates/.*/scripts/   # template-internal scripts: belong to the scaffolded project
+  )
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.terminal$'
+      - id: end-of-file-fixer
+        exclude: '\.terminal$'
+      - id: check-yaml
+        exclude: '\.tmpl$|\.jinja$'
+      - id: check-json
+        exclude: '\.tmpl$|\.jinja$'
+      - id: check-toml
+        exclude: '\.tmpl$|\.jinja$'
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: https://github.com/trufflesecurity/trufflehog
+    rev: v3.95.2
+    hooks:
+      - id: trufflehog
+        entry: trufflehog git file://. --max-depth=1 --results=verified,unverified --fail
+        stages: [pre-commit]
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [-x, -e, SC1091]
+        # Same exclusions as the CI shellcheck job.
+        exclude: |
+          (?x)^(
+            \.chezmoiscripts/|
+            dot_config/shell/|
+            dot_zshrc$|
+            dot_zprofile$|
+            private_dot_claude/hooks/
+          )
+
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.13.1-1
+    hooks:
+      - id: shfmt
+        args: [-i, "2", -ci, -bn, -d]
+        # private_dot_claude/hooks/ holds Python scripts deployed under .sh
+        # filenames (chezmoi target ~/.claude/hooks/*.sh); shfmt would parse
+        # them as bash and fail. CI's shfmt job filters by shebang so it
+        # avoids them naturally; this mirror is for local pre-commit.
+        exclude: |
+          (?x)^(
+            \.chezmoiscripts/|
+            dot_config/shell/|
+            dot_zshrc$|
+            dot_zprofile$|
+            private_dot_claude/hooks/
+          )
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.48.0
+    hooks:
+      - id: markdownlint
+        args: [--config, dot_markdownlintrc]
+        exclude: "^(templates/|private_dot_claude/)"
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.12
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format

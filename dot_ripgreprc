@@ -1,0 +1,17 @@
+# ripgrep configuration
+--smart-case
+--hidden
+--glob=!.git/*
+--glob=!node_modules/*
+--glob=!.venv/*
+--glob=!venv/*
+--glob=!build/*
+--glob=!dist/*
+--glob=!*.pyc
+--colors=line:fg:yellow
+--colors=line:style:bold
+--colors=path:fg:green
+--colors=path:style:bold
+--colors=match:fg:black
+--colors=match:bg:yellow
+--colors=match:style:nobold

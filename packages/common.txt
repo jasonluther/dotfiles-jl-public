@@ -1,0 +1,31 @@
+# Cross-platform CLI tools — brew on macOS, apt on Debian.
+# Format: one package name per line. Blank lines and `#` comments allowed.
+# Use the brew formula name; for differing apt names add an entry in apt-aliases.txt.
+
+awscli
+bat
+clang-format
+cmake
+direnv
+dos2unix
+ffmpeg
+fswatch
+fzf
+gh
+git
+git-filter-repo
+jq
+miller
+nmap
+pandoc
+pipx
+ripgrep
+shfmt
+tmux
+tree
+zoxide
+
+# Best-effort on Linux — older Debian/Ubuntu lack a watchexec apt package.
+# install-packages.sh will report it as skipped; install via cargo or the
+# upstream .deb release if you need it.
+watchexec

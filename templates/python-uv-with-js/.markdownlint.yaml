@@ -1,0 +1,39 @@
+# Markdownlint configuration for technical documentation
+# See: https://github.com/markdownlint/markdownlint/blob/main/docs/RULES.md
+
+# Disable line length checking - mdformat handles automatic wrapping
+MD013:
+  line_length: 88
+  code_blocks: false
+  tables: false
+
+# Allow duplicate headers in different sections
+MD024:
+  siblings_only: true
+
+# Allow inline HTML for complex formatting
+MD033: true
+
+# Allow multiple consecutive blank lines for readability
+MD012: true
+
+# Allow bare URLs in technical documentation
+MD034: true
+
+# Allow emphasis as style choice (disable bold-as-heading check for game walkthroughs)
+MD036: false
+
+# Allow multiple top-level headings (common in technical specs)
+MD025: true
+
+# Disable ordered list prefix checking (we use non-sequential numbers intentionally)
+MD029: false
+
+# Require blank line around fenced code blocks
+MD031: true
+
+# Require blank line around lists
+MD032: true
+
+# Require language for fenced code blocks (good for syntax highlighting)
+MD040: true

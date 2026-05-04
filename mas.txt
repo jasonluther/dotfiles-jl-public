@@ -1,0 +1,14 @@
+# Mac App Store apps installed on every machine.
+# Format: <id> <App Name>
+# The "App Name" must match the .app bundle in /Applications (without the .app extension).
+# Installed by .chezmoiscripts/run_onchange_after_install-mas-apps.sh.tmpl
+1569813296 1Password for Safari
+1193539993 Brother iPrint&Scan
+640199958 Developer
+1381004916 Discovery
+472226235 LanScan
+1453365242 P-touch Editor
+1382572478 Remote for HEOS
+1086871235 Reolink Client
+803453959 Slack
+1497506650 Yubico Authenticator

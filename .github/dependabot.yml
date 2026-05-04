@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # Pinned action versions in .github/workflows/*.yml.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+      include: scope
+
+  # Pinned hook versions in .pre-commit-config.yaml. Dependabot added
+  # native pre-commit support in late 2024.
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore(pre-commit)
+      include: scope
+
+  # Templates' rendered pre-commit-config and pyproject have their own pinned
+  # versions, but they're inside .jinja files so dependabot can't update them.
+  # Bump those manually when the root pre-commit-config bumps the same hook.

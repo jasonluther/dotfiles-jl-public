@@ -1,0 +1,57 @@
+# Copier template configuration.
+# Two flavors are selected by the `flavor` question; each renders from a
+# subdirectory of templates/.
+
+_min_copier_version: "9.0.0"
+_subdirectory: "templates/{{ flavor }}"
+_answers_file: .copier-answers.yml
+
+flavor:
+  type: str
+  help: Which template flavor?
+  choices:
+    - python-uv
+    - python-uv-with-js
+
+project_name:
+  type: str
+  help: Project name (used in pyproject.toml, README, etc.)
+  validator: "{% if not (project_name | regex_search('^[a-z][a-z0-9-]*$')) %}must be lowercase letters, numbers, and dashes only{% endif %}"
+
+project_slug:
+  type: str
+  help: Python package slug (underscores, used as the importable module name)
+  default: "{{ project_name | replace('-', '_') }}"
+
+description:
+  type: str
+  help: One-line description of the project
+
+author_name:
+  type: str
+  help: Author name
+  default: "Your Name"
+
+author_email:
+  type: str
+  help: Author email
+  default: "you@example.com"
+
+python_version:
+  type: str
+  help: Python version (matches .python-version and pyproject.toml)
+  default: "3.13"
+
+license:
+  type: str
+  help: License
+  choices:
+    - MIT
+    - Apache-2.0
+  default: MIT
+
+year:
+  type: str
+  help: Copyright year (auto)
+  default: "{{ '%Y' | strftime }}"
+  when: false

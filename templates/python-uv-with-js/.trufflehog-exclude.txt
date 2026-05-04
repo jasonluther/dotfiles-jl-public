@@ -1,0 +1,6 @@
+# Paths excluded from TruffleHog secret scanning.
+# One path regex per line.
+
+^\.venv/
+^node_modules/
+^tests/fixtures/

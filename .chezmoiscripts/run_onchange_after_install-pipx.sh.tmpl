@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Thin wrapper for scripts/install-pipx.sh.
+#
+# pipx.txt hash: {{ include "packages/pipx.txt" | sha256sum }}
+
+exec {{ joinPath .chezmoi.sourceDir "scripts/install-pipx.sh" | quote }}

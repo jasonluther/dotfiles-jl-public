@@ -1,0 +1,11 @@
+# PlatformIO platforms to install via `pio pkg install --global -p <name>`.
+# Format: one platform name per line. Blank lines and `#` comments allowed.
+#
+# These mirror the arduino-cli cores in arduino-cores.txt.
+
+atmelavr
+atmelmegaavr
+atmelsam
+espressif32
+espressif8266
+raspberrypi

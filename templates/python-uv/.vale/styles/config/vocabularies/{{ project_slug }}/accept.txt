@@ -1,0 +1,3 @@
+# Project-specific vocabulary — words Vale should treat as correct.
+# One word per line, case-insensitive. Examples: product names, acronyms,
+# made-up terms, proper nouns.

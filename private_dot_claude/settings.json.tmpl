@@ -1,0 +1,157 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(actionlint:*)",
+      "Bash(bash:*)",
+      "Bash(brew:*)",
+      "Bash(chezmoi:*)",
+      "Bash(claude:*)",
+      "Bash(code:*)",
+      "Bash(curl:*)",
+      "Bash(defaults read:*)",
+      "Bash(direnv:*)",
+      "Bash(docker:*)",
+      "Bash(du:*)",
+      "Bash(env:*)",
+      "Bash(gh:*)",
+      "Bash(git:*)",
+      "Bash(launchctl:*)",
+      "Bash(ls:*)",
+      "Bash(lsof:*)",
+      "Bash(make:*)",
+      "Bash(mas:*)",
+      "Bash(mdfind:*)",
+      "Bash(mdls:*)",
+      "Bash(mkdir:*)",
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(open:*)",
+      "Bash(pip:*)",
+      "Bash(pip3:*)",
+      "Bash(pipx:*)",
+      "Bash(podman:*)",
+      "Bash(podman-compose:*)",
+      "Bash(pre-commit:*)",
+      "Bash(ps:*)",
+      "Bash(psql:*)",
+      "Bash(pyenv:*)",
+      "Bash(pytest:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(review-diff:*)",
+      "Bash(ruff:*)",
+      "Bash(sqlite3:*)",
+      "Bash(ssh-add:*)",
+      "Bash(sysctl:*)",
+      "Bash(tmutil listlocalsnapshots:*)",
+      "Bash(time:*)",
+      "Bash(tree:*)",
+      "Bash(trufflehog:*)",
+      "Bash(uv:*)",
+      "Bash(vale:*)",
+      "Bash(vulture:*)",
+      "Bash(wc:*)",
+      "Bash(which:*)",
+      "Bash(xargs:*)",
+      "Skill(chezmoi)",
+      "Skill(code-review)",
+      "Skill(icloud-cleanup)",
+      "Skill(pr)",
+      "Skill(simplify)",
+      "Skill(loop)",
+      "Skill(claude-api)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:formulae.brew.sh)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebSearch",
+      "mcp__plugin_serena_serena__activate_project",
+      "mcp__plugin_serena_serena__check_onboarding_performed",
+      "mcp__plugin_serena_serena__edit_memory",
+      "mcp__plugin_serena_serena__find_file",
+      "mcp__plugin_serena_serena__find_referencing_symbols",
+      "mcp__plugin_serena_serena__find_symbol",
+      "mcp__plugin_serena_serena__get_current_config",
+      "mcp__plugin_serena_serena__get_symbols_overview",
+      "mcp__plugin_serena_serena__initial_instructions",
+      "mcp__plugin_serena_serena__insert_after_symbol",
+      "mcp__plugin_serena_serena__insert_before_symbol",
+      "mcp__plugin_serena_serena__list_dir",
+      "mcp__plugin_serena_serena__list_memories",
+      "mcp__plugin_serena_serena__onboarding",
+      "mcp__plugin_serena_serena__read_file",
+      "mcp__plugin_serena_serena__read_memory",
+      "mcp__plugin_serena_serena__replace_content",
+      "mcp__plugin_serena_serena__replace_symbol_body",
+      "mcp__plugin_serena_serena__search_for_pattern",
+      "mcp__plugin_serena_serena__write_memory",
+      "mcp__plugin_serena_serena__execute_shell_command"
+    ],
+    "deny": [],
+    "ask": [],
+    "defaultMode": "auto",
+    "additionalDirectories": [
+      "{{ .chezmoi.homeDir }}/.claude/plans",
+      "/tmp"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/block-main-edits.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/format-on-edit.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "pyright-lsp@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "serena@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "code-review@claude-code-plugins": true,
+    "frontend-design@claude-code-plugins": true,
+    "superpowers@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true,
+    "greptile@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-code-plugins": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/anthropics/claude-code.git"
+      }
+    }
+  },
+  "effortLevel": "high",
+  "skipDangerousModePermissionPrompt": true,
+  "skipAutoPermissionPrompt": true
+}

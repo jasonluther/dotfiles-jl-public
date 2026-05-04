@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Thin wrapper for scripts/macos/setup-python.sh.
+#
+# Brewfile hash: {{ include "Brewfile" | sha256sum }}
+
+{{ if eq .chezmoi.os "darwin" -}}
+exec {{ joinPath .chezmoi.sourceDir "scripts/macos/setup-python.sh" | quote }}
+{{- else -}}
+# macOS-only: skipped on {{ .chezmoi.os }}.
+{{- end }}
