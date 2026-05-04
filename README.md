@@ -9,7 +9,9 @@ Jason Luther's portable dotfiles. Works on a fresh macOS or apt-based Linux mach
 ```sh
 # curl
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/jasonluther/dotfiles-jl-public/main/install.sh)"
+```
 
+```sh
 # wget
 bash -c "$(wget -qO- https://raw.githubusercontent.com/jasonluther/dotfiles-jl-public/main/install.sh)"
 ```
