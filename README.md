@@ -82,11 +82,3 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply jasonluther/dotfiles-jl-pub
   and symlinked into `~/.config/cspell/personal-words.txt` on macOS. Drop a
   copy into iCloud once on a fresh Mac and chezmoi creates the symlink on
   apply. Linux machines skip cspell.
-- The `check-backups` symlink — installed by the
-  [backup-plans](https://github.com/jasonluther/backup-plans) repo's
-  `backup-check/install.sh`.
-
-## Related repos
-
-- [`remote-work`](https://github.com/jasonluther/remote-work) — LXD container provisioning toolkit for isolated work environments.
-- [`backup-plans`](https://github.com/jasonluther/backup-plans) — Personal backup-monitoring scripts and launchd agent.
