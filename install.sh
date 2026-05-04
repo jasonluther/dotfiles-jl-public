@@ -52,23 +52,24 @@ if ((is_linux)); then
 fi
 
 if ((is_darwin)); then
-  # Homebrew is required by scripts/install-packages.sh, which chezmoi
-  # apply runs as a `before_` script. Bootstrap it here so a fresh Mac
-  # actually works end-to-end. The official installer is idempotent and
-  # also installs the Xcode CLI tools as a side effect.
-  if ! command -v brew >/dev/null 2>&1 \
-    && [[ ! -x /opt/homebrew/bin/brew ]] \
-    && [[ ! -x /usr/local/bin/brew ]]; then
+  # Homebrew is a hard prereq for scripts/install-packages.sh (the
+  # before_ script chezmoi apply runs). The official installer also
+  # installs the Xcode CLI tools as a side effect, which gives us git
+  # for chezmoi init's identity derivation.
+  brew_bin=""
+  for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    [[ -x "$candidate" ]] && brew_bin="$candidate" && break
+  done
+  if [[ -z "$brew_bin" ]] && ! command -v brew >/dev/null 2>&1; then
     echo "==> Installing Homebrew (will prompt for sudo)..."
     NONINTERACTIVE=1 /bin/bash -c \
       "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+      [[ -x "$candidate" ]] && brew_bin="$candidate" && break
+    done
   fi
-  # Put brew on PATH for the rest of this script (Apple Silicon vs Intel).
-  if [[ -x /opt/homebrew/bin/brew ]]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-  elif [[ -x /usr/local/bin/brew ]]; then
-    eval "$(/usr/local/bin/brew shellenv)"
-  fi
+  [[ -n "$brew_bin" ]] && eval "$("$brew_bin" shellenv)"
+  unset brew_bin candidate
 fi
 
 # Install chezmoi if missing. Use ~/.local/bin so we don't need sudo.
