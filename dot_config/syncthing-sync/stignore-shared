@@ -1,0 +1,38 @@
+// Shared Syncthing ignore patterns applied to every folder by apply-ignores.sh.
+// Keep this list generic — no project, path, or host-specific entries.
+// Per-folder overrides live in ~/.config/syncthing-sync/overrides.json (not versioned).
+
+// macOS
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+.fseventsd
+.TemporaryItems
+.DocumentRevisions-V100
+Icon?
+
+// Editors / IDEs
+*.swp
+*.swo
+*~
+.idea
+.vscode/.history
+
+// Build / dependency directories
+node_modules
+.venv
+__pycache__
+*.pyc
+target
+dist
+build
+.next
+.turbo
+.cache
+
+// VCS junk
+.git/index.lock
+.git/objects/pack/tmp_pack_*
