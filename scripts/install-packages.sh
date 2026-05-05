@@ -15,6 +15,20 @@ case "$(uname -s)" in
     ;;
 esac
 
+# Individual install failures accumulate here so one bad formula or apt
+# entry doesn't abort `chezmoi apply`. Summary printed on exit; script
+# always exits 0 if it reaches the end.
+declare -a failed=()
+filtered_brewfile=""
+
+cleanup() {
+  [[ -n "$filtered_brewfile" ]] && rm -f "$filtered_brewfile"
+  if [[ ${#failed[@]} -gt 0 ]]; then
+    printf '\033[1;33mfailed to install:\033[0m %s\n' "${failed[*]}" >&2
+  fi
+}
+trap cleanup EXIT
+
 read_list() {
   local arr_name="$1" path="$2" line
   eval "$arr_name=()"
@@ -46,7 +60,12 @@ if [[ "$os" == "darwin" ]]; then
 
   if [[ ${#common[@]} -gt 0 ]]; then
     echo "==> brew install (common.txt: ${#common[@]} packages)"
-    brew install "${common[@]}"
+    if ! brew install "${common[@]}"; then
+      echo "==> brew install: bulk failed, retrying per-package..." >&2
+      for pkg in "${common[@]}"; do
+        brew install "$pkg" || failed+=("$pkg")
+      done
+    fi
   fi
 
   # Reconcile Brewfile casks with apps already installed by hand, .pkg, or
@@ -56,9 +75,10 @@ if [[ "$os" == "darwin" ]]; then
   echo "==> resolving cask conflicts"
   mapfile -t skip_casks < <("$SRC/scripts/macos/resolve-cask-conflicts.sh" "$SRC/Brewfile")
 
+  # `brew bundle` exits non-zero when any entry fails. Record the failure
+  # rather than aborting so chezmoi apply continues.
   if ((${#skip_casks[@]} > 0)); then
     filtered_brewfile="$(mktemp -t Brewfile.XXXXXX)"
-    trap 'rm -f "$filtered_brewfile"' EXIT
     awk -v skips="$(
       IFS='|'
       echo "${skip_casks[*]}"
@@ -72,10 +92,10 @@ if [[ "$os" == "darwin" ]]; then
       { print }
     ' "$SRC/Brewfile" >"$filtered_brewfile"
     echo "==> brew bundle (Brewfile, skipping ${#skip_casks[@]} conflicting cask(s): ${skip_casks[*]})"
-    brew bundle --file="$filtered_brewfile"
+    brew bundle --file="$filtered_brewfile" || failed+=("brew-bundle-entries")
   else
     echo "==> brew bundle (Brewfile)"
-    brew bundle --file="$SRC/Brewfile"
+    brew bundle --file="$SRC/Brewfile" || failed+=("brew-bundle-entries")
   fi
   exit 0
 fi
@@ -124,7 +144,12 @@ done
 
 if [[ ${#available[@]} -gt 0 ]]; then
   echo "==> apt-get install (${#available[@]} packages)"
-  sudo apt-get install -y --no-install-recommends "${available[@]}"
+  if ! sudo apt-get install -y --no-install-recommends "${available[@]}"; then
+    echo "==> apt-get install: bulk failed, retrying per-package..." >&2
+    for pkg in "${available[@]}"; do
+      sudo apt-get install -y --no-install-recommends "$pkg" || failed+=("$pkg")
+    done
+  fi
 fi
 
 # Fallback installers for tools Debian doesn't ship (or ships too stale).
@@ -172,9 +197,9 @@ fallback_tldr() {
 declare -a still_skipped=()
 for pkg in "${skipped[@]:-}"; do
   case "$pkg" in
-    ruff) fallback_ruff ;;
-    watchexec) fallback_watchexec ;;
-    tldr) fallback_tldr ;;
+    ruff) fallback_ruff || failed+=("ruff") ;;
+    watchexec) fallback_watchexec || failed+=("watchexec") ;;
+    tldr) fallback_tldr || failed+=("tldr") ;;
     *) still_skipped+=("$pkg") ;;
   esac
 done
