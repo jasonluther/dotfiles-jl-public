@@ -81,7 +81,7 @@ fi
 
 if $has_md && has vale; then
   bold "── Vale (Prose) ──"
-  out=$(vale --no-exit --output line . 2>&1) || true
+  out=$(vale --no-exit --output line --glob='!.claude/**' . 2>&1) || true
   if [ -z "$out" ]; then
     ok "  no issues"
   else
