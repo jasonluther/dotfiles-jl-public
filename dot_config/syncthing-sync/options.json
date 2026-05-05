@@ -1,0 +1,11 @@
+{
+  "urAccepted": -1,
+  "crashReportingEnabled": true,
+  "relaysEnabled": true,
+  "globalAnnounceEnabled": true,
+  "localAnnounceEnabled": true,
+  "natEnabled": true,
+  "startBrowser": false,
+  "maxFolderConcurrency": 0,
+  "progressUpdateIntervalS": 5
+}
