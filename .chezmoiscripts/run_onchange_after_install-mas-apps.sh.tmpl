@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Thin wrapper for scripts/macos/install-mas-apps.sh.
+# Thin wrapper for scripts/macos/install-mas-apps.sh. The hash comments
+# below drive chezmoi's onchange detection — without the installer hash,
+# changes to install-mas-apps.sh wouldn't trigger a re-run on machines
+# whose mas.txt is unchanged.
 #
-# mas.txt hash: {{ include "mas.txt" | sha256sum }}
+# mas.txt   hash: {{ include "mas.txt" | sha256sum }}
+# installer hash: {{ include "scripts/macos/install-mas-apps.sh" | sha256sum }}
 
 {{ if eq .chezmoi.os "darwin" -}}
 exec {{ joinPath .chezmoi.sourceDir "scripts/macos/install-mas-apps.sh" | quote }}
