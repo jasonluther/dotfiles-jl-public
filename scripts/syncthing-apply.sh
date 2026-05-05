@@ -59,16 +59,17 @@ apply_ignores() {
     return
   fi
 
-  local folder_ids fid payload count
-  mapfile -t folder_ids < <(api "$API_URL/rest/config/folders" \
+  local fid payload count folder_ids_raw
+  folder_ids_raw=$(api "$API_URL/rest/config/folders" \
     | python3 -c 'import sys,json; [print(f["id"]) for f in json.load(sys.stdin)]')
 
-  if [[ ${#folder_ids[@]} -eq 0 ]]; then
+  if [[ -z "$folder_ids_raw" ]]; then
     echo "ignores: no folders configured"
     return
   fi
 
-  for fid in "${folder_ids[@]}"; do
+  while IFS= read -r fid; do
+    [[ -z "$fid" ]] && continue
     payload=$(SHARED="$SHARED_FILE" OVR="$OVERRIDES_FILE" FID="$fid" python3 -c '
 import json, os, re
 patterns, seen = [], set()
@@ -97,7 +98,7 @@ print(json.dumps({"ignore": patterns}))
         "$API_URL/rest/db/ignores?folder=$fid" >/dev/null
       echo "[ignores:$fid] applied $count patterns"
     fi
-  done
+  done <<<"$folder_ids_raw"
 }
 
 # GET endpoint, overlay only top-level keys present in $file, PUT.

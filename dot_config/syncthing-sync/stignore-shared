@@ -22,13 +22,15 @@ Icon?
 .vscode/.history
 
 // Build / dependency directories
+// Only patterns that are unambiguously tool-specific go here. Common English
+// words like `build`, `dist`, `target` are intentionally NOT included — they
+// can collide with user data directories named the same thing (e.g. a CNC
+// project's `build/` containing photos). Add those as per-folder overrides
+// in ~/.config/syncthing-sync/overrides.json for code-only folders.
 node_modules
 .venv
 __pycache__
 *.pyc
-target
-dist
-build
 .next
 .turbo
 .cache
