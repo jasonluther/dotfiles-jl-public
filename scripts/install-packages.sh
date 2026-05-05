@@ -20,14 +20,32 @@ esac
 # always exits 0 if it reaches the end.
 declare -a failed=()
 filtered_brewfile=""
+bundle_log=""
 
 cleanup() {
   [[ -n "$filtered_brewfile" ]] && rm -f "$filtered_brewfile"
+  [[ -n "$bundle_log" ]] && rm -f "$bundle_log"
   if [[ ${#failed[@]} -gt 0 ]]; then
     printf '\033[1;33mfailed to install:\033[0m %s\n' "${failed[*]}" >&2
   fi
 }
 trap cleanup EXIT
+
+# Resolve "Could not symlink bin/X" errors by running the exact `brew link
+# --overwrite <formula>` recovery command brew prints. Happens when a previous
+# install left a stale symlink or another tool (npm, manual install) claimed
+# the link target before brew did. Returns 0 if any links were rewritten.
+relink_from_log() {
+  local log="$1" cmd applied=0
+  command -v brew >/dev/null 2>&1 || return 1
+  while IFS= read -r cmd; do
+    [[ -z "$cmd" ]] && continue
+    echo "==> $cmd" >&2
+    # shellcheck disable=SC2086
+    if $cmd; then applied=1; fi
+  done < <(grep -oE 'brew link --overwrite [a-zA-Z0-9_@.+-]+' "$log" | sort -u)
+  ((applied))
+}
 
 read_list() {
   local arr_name="$1" path="$2" line
@@ -58,12 +76,25 @@ if [[ "$os" == "darwin" ]]; then
     exit 1
   fi
 
+  brew_install_with_relink() {
+    local pkg="$1" log status
+    log="$(mktemp -t brew-install.XXXXXX)"
+    brew install "$pkg" 2>&1 | tee "$log"
+    status=${PIPESTATUS[0]}
+    if ((status != 0)) && relink_from_log "$log"; then
+      brew install "$pkg" 2>&1 | tee "$log"
+      status=${PIPESTATUS[0]}
+    fi
+    rm -f "$log"
+    return "$status"
+  }
+
   if [[ ${#common[@]} -gt 0 ]]; then
     echo "==> brew install (common.txt: ${#common[@]} packages)"
     if ! brew install "${common[@]}"; then
       echo "==> brew install: bulk failed, retrying per-package..." >&2
       for pkg in "${common[@]}"; do
-        brew install "$pkg" || failed+=("$pkg")
+        brew_install_with_relink "$pkg" || failed+=("$pkg")
       done
     fi
   fi
@@ -75,8 +106,11 @@ if [[ "$os" == "darwin" ]]; then
   echo "==> resolving cask conflicts"
   mapfile -t skip_casks < <("$SRC/scripts/macos/resolve-cask-conflicts.sh" "$SRC/Brewfile")
 
-  # `brew bundle` exits non-zero when any entry fails. Record the failure
-  # rather than aborting so chezmoi apply continues.
+  # `brew bundle` exits non-zero when any entry fails. Capture output so we
+  # can self-heal "Could not symlink" errors via `brew link --overwrite` and
+  # try once more before giving up. Record the residual failure rather than
+  # aborting so chezmoi apply continues.
+  bundle_log="$(mktemp -t brew-bundle.XXXXXX)"
   if ((${#skip_casks[@]} > 0)); then
     filtered_brewfile="$(mktemp -t Brewfile.XXXXXX)"
     awk -v skips="$(
@@ -92,11 +126,30 @@ if [[ "$os" == "darwin" ]]; then
       { print }
     ' "$SRC/Brewfile" >"$filtered_brewfile"
     echo "==> brew bundle (Brewfile, skipping ${#skip_casks[@]} conflicting cask(s): ${skip_casks[*]})"
-    brew bundle --file="$filtered_brewfile" || failed+=("brew-bundle-entries")
+    bundle_target="$filtered_brewfile"
   else
     echo "==> brew bundle (Brewfile)"
-    brew bundle --file="$SRC/Brewfile" || failed+=("brew-bundle-entries")
+    bundle_target="$SRC/Brewfile"
   fi
+
+  brew bundle --file="$bundle_target" 2>&1 | tee "$bundle_log"
+  bundle_status=${PIPESTATUS[0]}
+  if ((bundle_status != 0)) && relink_from_log "$bundle_log"; then
+    echo "==> brew bundle: retrying after relink" >&2
+    brew bundle --file="$bundle_target" 2>&1 | tee "$bundle_log"
+    bundle_status=${PIPESTATUS[0]}
+  fi
+  ((bundle_status == 0)) || failed+=("brew-bundle-entries")
+
+  # VSCode signature verification rejects unsigned extensions on first install
+  # (e.g. stkb.rewrap). brew bundle has no opt-out, so install via .vsix —
+  # local-file installs bypass marketplace signature checks.
+  if [[ -x "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" ]] \
+    && grep -qE 'Failed Installing Extensions' "$bundle_log"; then
+    echo "==> retrying signature-rejected VSCode extensions via .vsix"
+    "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" "$bundle_log" || failed+=("vsix-fallback")
+  fi
+
   exit 0
 fi
 
