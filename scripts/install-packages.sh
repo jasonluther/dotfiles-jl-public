@@ -144,8 +144,8 @@ if [[ "$os" == "darwin" ]]; then
   # VSCode signature verification rejects unsigned extensions on first install
   # (e.g. stkb.rewrap). brew bundle has no opt-out, so install via .vsix —
   # local-file installs bypass marketplace signature checks.
-  if [[ -x "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" ]] &&
-    grep -qE 'Failed Installing Extensions' "$bundle_log"; then
+  if [[ -x "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" ]] \
+    && grep -qE 'Failed Installing Extensions' "$bundle_log"; then
     echo "==> retrying signature-rejected VSCode extensions via .vsix"
     "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" "$bundle_log" || failed+=("vsix-fallback")
   fi
@@ -226,8 +226,8 @@ fallback_watchexec() {
       ;;
   esac
   local tarball="watchexec-${ver}-${arch}.tar.xz"
-  curl -fsSL "https://github.com/watchexec/watchexec/releases/download/v${ver}/${tarball}" |
-    tar -xJ -C "$HOME/.local/bin" --strip-components=1 "watchexec-${ver}-${arch}/watchexec"
+  curl -fsSL "https://github.com/watchexec/watchexec/releases/download/v${ver}/${tarball}" \
+    | tar -xJ -C "$HOME/.local/bin" --strip-components=1 "watchexec-${ver}-${arch}/watchexec"
 }
 
 fallback_tldr() {
