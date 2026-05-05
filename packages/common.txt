@@ -29,3 +29,7 @@ zoxide
 # install-packages.sh will report it as skipped; install via cargo or the
 # upstream .deb release if you need it.
 watchexec
+
+# Best-effort on Linux — kondo isn't in apt. Install via `cargo install kondo`
+# or grab a release from https://github.com/tbillington/kondo.
+kondo
