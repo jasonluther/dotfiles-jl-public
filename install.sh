@@ -87,7 +87,11 @@ if [[ ! -d "$CHEZMOI_SRC/.git" ]]; then
   chezmoi init "$REPO"
 else
   current_url="$(git -C "$CHEZMOI_SRC" remote get-url origin 2>/dev/null || true)"
-  if [[ "$current_url" != "$EXPECTED_URL" && "$current_url" != "git@github.com:$REPO.git" ]]; then
+  # Treat https/ssh and trailing-`.git`/no-`.git` as equivalent — `chezmoi
+  # init` writes the no-suffix https form, but `git clone` and most users
+  # write the `.git` suffix; both point at the same repo.
+  normalized="${current_url%.git}"
+  if [[ "$normalized" != "$EXPECTED_URL" && "$normalized" != "git@github.com:$REPO" ]]; then
     # `chezmoi init` skips cloning when the source dir already exists, so
     # `--force` alone won't swap remotes. Refuse to wipe a dirty tree;
     # otherwise move it aside and re-clone.

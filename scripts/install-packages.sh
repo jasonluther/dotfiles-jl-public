@@ -140,12 +140,16 @@ if [[ "$os" == "darwin" ]]; then
     bundle_target="$SRC/Brewfile"
   fi
 
-  brew bundle --file="$bundle_target" >"$bundle_log" 2>&1
-  bundle_status=$?
+  # `|| bundle_status=$?` keeps `set -e` from killing the script on a brew
+  # bundle failure — recovery (relink, vsix fallback) and `brew bundle check`
+  # below are responsible for distinguishing recoverable failures from real
+  # ones.
+  bundle_status=0
+  brew bundle --file="$bundle_target" >"$bundle_log" 2>&1 || bundle_status=$?
   if ((bundle_status != 0)) && relink_from_log "$bundle_log"; then
     echo "==> retrying after relink" >&2
-    brew bundle --file="$bundle_target" >"$bundle_log" 2>&1
-    bundle_status=$?
+    bundle_status=0
+    brew bundle --file="$bundle_target" >"$bundle_log" 2>&1 || bundle_status=$?
   fi
 
   # If brew bundle reported VSCode signature failures, recover via .vsix
