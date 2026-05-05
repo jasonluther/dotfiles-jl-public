@@ -15,6 +15,38 @@ case "$(uname -s)" in
     ;;
 esac
 
+# Individual install failures accumulate here so one bad formula or apt
+# entry doesn't abort `chezmoi apply`. Summary printed on exit; script
+# always exits 0 if it reaches the end.
+declare -a failed=()
+filtered_brewfile=""
+bundle_log=""
+
+cleanup() {
+  [[ -n "$filtered_brewfile" ]] && rm -f "$filtered_brewfile"
+  [[ -n "$bundle_log" ]] && rm -f "$bundle_log"
+  if [[ ${#failed[@]} -gt 0 ]]; then
+    printf '\033[1;33mfailed to install:\033[0m %s\n' "${failed[*]}" >&2
+  fi
+}
+trap cleanup EXIT
+
+# Resolve "Could not symlink bin/X" errors by running the exact `brew link
+# --overwrite <formula>` recovery command brew prints. Happens when a previous
+# install left a stale symlink or another tool (npm, manual install) claimed
+# the link target before brew did. Returns 0 if any links were rewritten.
+relink_from_log() {
+  local log="$1" cmd applied=0
+  command -v brew >/dev/null 2>&1 || return 1
+  while IFS= read -r cmd; do
+    [[ -z "$cmd" ]] && continue
+    echo "==> $cmd" >&2
+    # shellcheck disable=SC2086
+    if $cmd; then applied=1; fi
+  done < <(grep -oE 'brew link --overwrite [a-zA-Z0-9_@.+-]+' "$log" | sort -u)
+  ((applied))
+}
+
 read_list() {
   local arr_name="$1" path="$2" line
   eval "$arr_name=()"
@@ -44,13 +76,80 @@ if [[ "$os" == "darwin" ]]; then
     exit 1
   fi
 
+  brew_install_with_relink() {
+    local pkg="$1" log status
+    log="$(mktemp -t brew-install.XXXXXX)"
+    brew install "$pkg" 2>&1 | tee "$log"
+    status=${PIPESTATUS[0]}
+    if ((status != 0)) && relink_from_log "$log"; then
+      brew install "$pkg" 2>&1 | tee "$log"
+      status=${PIPESTATUS[0]}
+    fi
+    rm -f "$log"
+    return "$status"
+  }
+
   if [[ ${#common[@]} -gt 0 ]]; then
     echo "==> brew install (common.txt: ${#common[@]} packages)"
-    brew install "${common[@]}"
+    if ! brew install "${common[@]}"; then
+      echo "==> brew install: bulk failed, retrying per-package..." >&2
+      for pkg in "${common[@]}"; do
+        brew_install_with_relink "$pkg" || failed+=("$pkg")
+      done
+    fi
   fi
 
-  echo "==> brew bundle (Brewfile)"
-  brew bundle --file="$SRC/Brewfile"
+  # Reconcile Brewfile casks with apps already installed by hand, .pkg, or
+  # the App Store. The resolver tries `brew install --cask --adopt` for each
+  # collision; anything it can't adopt is printed on stdout so we can drop it
+  # from the Brewfile we feed to `brew bundle` (which would otherwise abort).
+  echo "==> resolving cask conflicts"
+  mapfile -t skip_casks < <("$SRC/scripts/macos/resolve-cask-conflicts.sh" "$SRC/Brewfile")
+
+  # `brew bundle` exits non-zero when any entry fails. Capture output so we
+  # can self-heal "Could not symlink" errors via `brew link --overwrite` and
+  # try once more before giving up. Record the residual failure rather than
+  # aborting so chezmoi apply continues.
+  bundle_log="$(mktemp -t brew-bundle.XXXXXX)"
+  if ((${#skip_casks[@]} > 0)); then
+    filtered_brewfile="$(mktemp -t Brewfile.XXXXXX)"
+    awk -v skips="$(
+      IFS='|'
+      echo "${skip_casks[*]}"
+    )" '
+      BEGIN { n = split(skips, arr, "|"); for (i = 1; i <= n; i++) skip[arr[i]] = 1 }
+      /^[[:space:]]*cask "/ {
+        match($0, /"[^"]+"/)
+        name = substr($0, RSTART + 1, RLENGTH - 2)
+        if (skip[name]) next
+      }
+      { print }
+    ' "$SRC/Brewfile" >"$filtered_brewfile"
+    echo "==> brew bundle (Brewfile, skipping ${#skip_casks[@]} conflicting cask(s): ${skip_casks[*]})"
+    bundle_target="$filtered_brewfile"
+  else
+    echo "==> brew bundle (Brewfile)"
+    bundle_target="$SRC/Brewfile"
+  fi
+
+  brew bundle --file="$bundle_target" 2>&1 | tee "$bundle_log"
+  bundle_status=${PIPESTATUS[0]}
+  if ((bundle_status != 0)) && relink_from_log "$bundle_log"; then
+    echo "==> brew bundle: retrying after relink" >&2
+    brew bundle --file="$bundle_target" 2>&1 | tee "$bundle_log"
+    bundle_status=${PIPESTATUS[0]}
+  fi
+  ((bundle_status == 0)) || failed+=("brew-bundle-entries")
+
+  # VSCode signature verification rejects unsigned extensions on first install
+  # (e.g. stkb.rewrap). brew bundle has no opt-out, so install via .vsix —
+  # local-file installs bypass marketplace signature checks.
+  if [[ -x "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" ]] &&
+    grep -qE 'Failed Installing Extensions' "$bundle_log"; then
+    echo "==> retrying signature-rejected VSCode extensions via .vsix"
+    "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" "$bundle_log" || failed+=("vsix-fallback")
+  fi
+
   exit 0
 fi
 
@@ -98,7 +197,12 @@ done
 
 if [[ ${#available[@]} -gt 0 ]]; then
   echo "==> apt-get install (${#available[@]} packages)"
-  sudo apt-get install -y --no-install-recommends "${available[@]}"
+  if ! sudo apt-get install -y --no-install-recommends "${available[@]}"; then
+    echo "==> apt-get install: bulk failed, retrying per-package..." >&2
+    for pkg in "${available[@]}"; do
+      sudo apt-get install -y --no-install-recommends "$pkg" || failed+=("$pkg")
+    done
+  fi
 fi
 
 # Fallback installers for tools Debian doesn't ship (or ships too stale).
@@ -122,8 +226,8 @@ fallback_watchexec() {
       ;;
   esac
   local tarball="watchexec-${ver}-${arch}.tar.xz"
-  curl -fsSL "https://github.com/watchexec/watchexec/releases/download/v${ver}/${tarball}" \
-    | tar -xJ -C "$HOME/.local/bin" --strip-components=1 "watchexec-${ver}-${arch}/watchexec"
+  curl -fsSL "https://github.com/watchexec/watchexec/releases/download/v${ver}/${tarball}" |
+    tar -xJ -C "$HOME/.local/bin" --strip-components=1 "watchexec-${ver}-${arch}/watchexec"
 }
 
 fallback_tldr() {
@@ -146,9 +250,9 @@ fallback_tldr() {
 declare -a still_skipped=()
 for pkg in "${skipped[@]:-}"; do
   case "$pkg" in
-    ruff) fallback_ruff ;;
-    watchexec) fallback_watchexec ;;
-    tldr) fallback_tldr ;;
+    ruff) fallback_ruff || failed+=("ruff") ;;
+    watchexec) fallback_watchexec || failed+=("watchexec") ;;
+    tldr) fallback_tldr || failed+=("tldr") ;;
     *) still_skipped+=("$pkg") ;;
   esac
 done
