@@ -76,14 +76,22 @@ if [[ "$os" == "darwin" ]]; then
     exit 1
   fi
 
-  brew_install_with_relink() {
-    local pkg="$1" log status
-    log="$(mktemp -t brew-install.XXXXXX)"
-    brew install "$pkg" 2>&1 | tee "$log"
-    status=${PIPESTATUS[0]}
+  # Run a noisy command quietly: capture combined output, only echo it if the
+  # command fails (after any relink retry). Keeps `chezmoi apply` output to
+  # one progress line per phase unless something actually breaks.
+  run_quiet() {
+    local label="$1" log status
+    shift
+    log="$(mktemp -t install-pkg.XXXXXX)"
+    "$@" >"$log" 2>&1
+    status=$?
     if ((status != 0)) && relink_from_log "$log"; then
-      brew install "$pkg" 2>&1 | tee "$log"
-      status=${PIPESTATUS[0]}
+      "$@" >"$log" 2>&1
+      status=$?
+    fi
+    if ((status != 0)); then
+      printf '\033[1;31m%s failed (exit %d):\033[0m\n' "$label" "$status" >&2
+      cat "$log" >&2
     fi
     rm -f "$log"
     return "$status"
@@ -91,10 +99,10 @@ if [[ "$os" == "darwin" ]]; then
 
   if [[ ${#common[@]} -gt 0 ]]; then
     echo "==> brew install (common.txt: ${#common[@]} packages)"
-    if ! brew install "${common[@]}"; then
-      echo "==> brew install: bulk failed, retrying per-package..." >&2
+    if ! run_quiet "brew install (bulk)" brew install "${common[@]}"; then
+      echo "==> retrying per-package..." >&2
       for pkg in "${common[@]}"; do
-        brew_install_with_relink "$pkg" || failed+=("$pkg")
+        run_quiet "brew install $pkg" brew install "$pkg" || failed+=("$pkg")
       done
     fi
   fi
@@ -132,22 +140,31 @@ if [[ "$os" == "darwin" ]]; then
     bundle_target="$SRC/Brewfile"
   fi
 
-  brew bundle --file="$bundle_target" 2>&1 | tee "$bundle_log"
-  bundle_status=${PIPESTATUS[0]}
+  brew bundle --file="$bundle_target" >"$bundle_log" 2>&1
+  bundle_status=$?
   if ((bundle_status != 0)) && relink_from_log "$bundle_log"; then
-    echo "==> brew bundle: retrying after relink" >&2
-    brew bundle --file="$bundle_target" 2>&1 | tee "$bundle_log"
-    bundle_status=${PIPESTATUS[0]}
+    echo "==> retrying after relink" >&2
+    brew bundle --file="$bundle_target" >"$bundle_log" 2>&1
+    bundle_status=$?
   fi
-  ((bundle_status == 0)) || failed+=("brew-bundle-entries")
 
-  # VSCode signature verification rejects unsigned extensions on first install
-  # (e.g. stkb.rewrap). brew bundle has no opt-out, so install via .vsix —
-  # local-file installs bypass marketplace signature checks.
+  # If brew bundle reported VSCode signature failures, recover via .vsix
+  # silently. The "brew bundle check" pass below decides whether anything was
+  # left unresolved.
   if [[ -x "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" ]] \
     && grep -qE 'Failed Installing Extensions' "$bundle_log"; then
     echo "==> retrying signature-rejected VSCode extensions via .vsix"
-    "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" "$bundle_log" || failed+=("vsix-fallback")
+    "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" "$bundle_log" >/dev/null 2>&1 \
+      || failed+=("vsix-fallback")
+  fi
+
+  # Re-check the bundle authoritatively. If everything resolved (including via
+  # vsix fallback), brew bundle check passes and we stay quiet. Anything still
+  # missing is a real failure we should surface.
+  if ! brew bundle check --file="$bundle_target" --no-upgrade >/dev/null 2>&1; then
+    printf '\033[1;31mbrew bundle: residual failures after recovery:\033[0m\n' >&2
+    brew bundle check --file="$bundle_target" --no-upgrade --verbose >&2 || true
+    failed+=("brew-bundle-entries")
   fi
 
   exit 0
