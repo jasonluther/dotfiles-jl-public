@@ -5,8 +5,10 @@
 # common.txt   hash: {{ include "packages/common.txt" | sha256sum }}
 # apt.txt      hash: {{ include "packages/apt.txt" | sha256sum }}
 # apt-aliases  hash: {{ include "packages/apt-aliases.txt" | sha256sum }}
+# installer    hash: {{ include "scripts/install-packages.sh" | sha256sum }}
 {{- if eq .chezmoi.os "darwin" }}
 # Brewfile     hash: {{ include "Brewfile" | sha256sum }}
+# resolver     hash: {{ include "scripts/macos/resolve-cask-conflicts.sh" | sha256sum }}
 {{- end }}
 
 exec {{ joinPath .chezmoi.sourceDir "scripts/install-packages.sh" | quote }}
