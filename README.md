@@ -4,11 +4,15 @@ Initial setup and chezmoi for macOS and Debian.
 
 ## Install
 
-```sh
-# curl (macOS)
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/jasonluther/dotfiles-jl-public/main/install.sh)"
+### curl (macOS)
 
-# wget (minimal Debian)
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/jasonluther/dotfiles-jl-public/main/install.sh)"
+```
+
+### wget (minimal Debian)
+
+```sh
 bash -c "$(wget -qO- https://raw.githubusercontent.com/jasonluther/dotfiles-jl-public/main/install.sh)"
 ```
 
