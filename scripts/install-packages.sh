@@ -49,8 +49,34 @@ if [[ "$os" == "darwin" ]]; then
     brew install "${common[@]}"
   fi
 
-  echo "==> brew bundle (Brewfile)"
-  brew bundle --file="$SRC/Brewfile"
+  # Reconcile Brewfile casks with apps already installed by hand, .pkg, or
+  # the App Store. The resolver tries `brew install --cask --adopt` for each
+  # collision; anything it can't adopt is printed on stdout so we can drop it
+  # from the Brewfile we feed to `brew bundle` (which would otherwise abort).
+  echo "==> resolving cask conflicts"
+  mapfile -t skip_casks < <("$SRC/scripts/macos/resolve-cask-conflicts.sh" "$SRC/Brewfile")
+
+  if ((${#skip_casks[@]} > 0)); then
+    filtered_brewfile="$(mktemp -t Brewfile.XXXXXX)"
+    trap 'rm -f "$filtered_brewfile"' EXIT
+    awk -v skips="$(
+      IFS='|'
+      echo "${skip_casks[*]}"
+    )" '
+      BEGIN { n = split(skips, arr, "|"); for (i = 1; i <= n; i++) skip[arr[i]] = 1 }
+      /^[[:space:]]*cask "/ {
+        match($0, /"[^"]+"/)
+        name = substr($0, RSTART + 1, RLENGTH - 2)
+        if (skip[name]) next
+      }
+      { print }
+    ' "$SRC/Brewfile" >"$filtered_brewfile"
+    echo "==> brew bundle (Brewfile, skipping ${#skip_casks[@]} conflicting cask(s): ${skip_casks[*]})"
+    brew bundle --file="$filtered_brewfile"
+  else
+    echo "==> brew bundle (Brewfile)"
+    brew bundle --file="$SRC/Brewfile"
+  fi
   exit 0
 fi
 
