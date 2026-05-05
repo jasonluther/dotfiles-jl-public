@@ -147,5 +147,8 @@
   "editor.tokenColorCustomizations": {
     "textMateRules": []
   },
-  "dotenv.enableAutocloaking": false
+  "dotenv.enableAutocloaking": false,
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
 }
