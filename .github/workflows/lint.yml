@@ -37,6 +37,50 @@ jobs:
             dot_zshrc
             dot_zprofile
 
+  chezmoiscripts:
+    # The shellcheck job above excludes .chezmoiscripts/ because those files
+    # mix bash with Go-template directives ({{ if eq .chezmoi.os "darwin" }}…)
+    # that won't parse as plain bash. To keep them from drifting silently,
+    # render each template through `chezmoi execute-template` and pipe the
+    # result to `bash -n` for a syntax-only check.
+    #
+    # Caveat: CI is ubuntu-latest, so .chezmoi.os = "linux" — only the linux
+    # rendering path is exercised here. Darwin-gated blocks (`{{ if eq
+    # .chezmoi.os "darwin" }}…`) get apply-time validation on the operator's
+    # Mac.
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install chezmoi
+        run: |
+          sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Initialize chezmoi config from source
+        # `chezmoi init --source=...` evaluates .chezmoi.toml.tmpl and writes
+        # the resolved config to ~/.config/chezmoi/chezmoi.toml so subsequent
+        # `execute-template` calls have the same context as a real apply.
+        env:
+          CHEZMOI_NAME: ci
+          CHEZMOI_EMAIL: ci@example.com
+        run: chezmoi init --source="$GITHUB_WORKSPACE"
+      - name: Render and syntax-check .chezmoiscripts/*.tmpl
+        env:
+          CHEZMOI_NAME: ci
+          CHEZMOI_EMAIL: ci@example.com
+        run: |
+          shopt -s nullglob
+          files=(.chezmoiscripts/*.tmpl)
+          [ ${#files[@]} -eq 0 ] && { echo "no .chezmoiscripts templates"; exit 0; }
+          fail=0
+          for f in "${files[@]}"; do
+            echo "==> $f"
+            if ! chezmoi execute-template <"$f" | bash -n /dev/stdin; then
+              echo "FAIL: $f"
+              fail=1
+            fi
+          done
+          exit "$fail"
+
   shfmt:
     runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     steps:
