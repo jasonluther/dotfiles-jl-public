@@ -22,6 +22,10 @@ set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE="debian:bookworm-slim"
+# Pin amd64 so apt installs the same arch the operator's x86_64 hosts and
+# `ubuntu-latest` CI run. On Apple Silicon, the default would be arm64,
+# which still works but masks any amd64-only apt package issues.
+PLATFORM="linux/amd64"
 
 require() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -52,7 +56,7 @@ done
 tmp_home="$(mktemp -d -t chezmoi-smoke-home.XXXXXX)"
 trap 'rm -rf "$tmp_home"' EXIT
 
-docker_args=(run -v "$SRC:/src:ro" -v "$tmp_home:/root" -w /root)
+docker_args=(run --platform "$PLATFORM" -v "$SRC:/src:ro" -v "$tmp_home:/root" -w /root)
 if [ "$keep" -eq 0 ]; then
   docker_args+=(--rm)
 fi
@@ -93,12 +97,6 @@ if ! chezmoi --source=/src apply; then
   exit 1
 fi
 
-# Marker for idempotency check: any file under $HOME modified after this
-# point on the second apply will be newer than this marker.
-sleep 1
-touch /tmp/firstapply
-sleep 1
-
 fail=0
 check() {
   local label="$1"
@@ -118,21 +116,18 @@ check "~/.local/bin/start-work-setup exists"     test -f "$HOME/.local/bin/start
 check "~/.local/bin/start-work-setup executable" test -x "$HOME/.local/bin/start-work-setup"
 check "macOS-only ~/Library absent"              test ! -e "$HOME/Library"
 
-echo "==> second apply (idempotency)"
-if ! chezmoi --source=/src apply -v; then
-  red "second apply failed"
-  fail=1
-fi
-
-# After a clean second apply nothing under $HOME should be newer than
-# the marker. If anything is, the apply isn't idempotent.
-mutated=$(find "$HOME" -type f -newer /tmp/firstapply 2>/dev/null || true)
-if [ -n "$mutated" ]; then
-  red "FAIL  idempotency — files mutated on second apply:"
-  printf '  %s\n' "$mutated" >&2
+echo "==> second apply (idempotency, --dry-run)"
+# `chezmoi apply --dry-run` emits a line per change it would make. A clean
+# second apply should produce no output. We avoid a real second apply +
+# mtime sweep because chezmoi mutates its own state files (boltdb, cache)
+# even when no managed file changes — those would false-positive.
+dry_out=$(chezmoi --source=/src apply --dry-run 2>&1 || true)
+if [ -n "$dry_out" ]; then
+  red "FAIL  idempotency — chezmoi apply --dry-run reports pending changes:"
+  printf '  %s\n' "$dry_out" >&2
   fail=1
 else
-  green "ok    idempotency (no files mutated on second apply)"
+  green "ok    idempotency (chezmoi apply --dry-run is empty)"
 fi
 
 if [ "$fail" -ne 0 ]; then
