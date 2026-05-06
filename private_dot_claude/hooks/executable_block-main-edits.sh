@@ -87,10 +87,13 @@ def main() -> None:
 
     # Block if the target file lives inside the main worktree.
     if file_real.startswith(main_real + "/"):
+        project = os.path.basename(main_real)
+        worktree_home = os.environ.get("WORKTREE_HOME", "$HOME/Code/worktrees")
+        worktree_path = f"{worktree_home}/{project}/<branch>"
         print(
             f"Blocked: {file_path} is inside the main worktree ({main_worktree}) "
             f"which is on {branch}. Create a worktree first: "
-            f"git worktree add ../project-<feature> -b <branch>",
+            f"git worktree add {worktree_path} -b <branch>",
             file=sys.stderr,
         )
         sys.exit(2)
