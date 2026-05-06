@@ -141,9 +141,8 @@ if [[ "$os" == "darwin" ]]; then
   fi
 
   # `|| bundle_status=$?` keeps `set -e` from killing the script on a brew
-  # bundle failure — recovery (relink, vsix fallback) and `brew bundle check`
-  # below are responsible for distinguishing recoverable failures from real
-  # ones.
+  # bundle failure — recovery (relink) and `brew bundle check` below are
+  # responsible for distinguishing recoverable failures from real ones.
   bundle_status=0
   brew bundle --file="$bundle_target" >"$bundle_log" 2>&1 || bundle_status=$?
   if ((bundle_status != 0)) && relink_from_log "$bundle_log"; then
@@ -152,19 +151,9 @@ if [[ "$os" == "darwin" ]]; then
     brew bundle --file="$bundle_target" >"$bundle_log" 2>&1 || bundle_status=$?
   fi
 
-  # If brew bundle reported VSCode signature failures, recover via .vsix
-  # silently. The "brew bundle check" pass below decides whether anything was
-  # left unresolved.
-  if [[ -x "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" ]] \
-    && grep -qE 'Failed Installing Extensions' "$bundle_log"; then
-    echo "==> retrying signature-rejected VSCode extensions via .vsix"
-    "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" "$bundle_log" >/dev/null 2>&1 \
-      || failed+=("vsix-fallback")
-  fi
-
-  # Re-check the bundle authoritatively. If everything resolved (including via
-  # vsix fallback), brew bundle check passes and we stay quiet. Anything still
-  # missing is a real failure we should surface.
+  # Re-check the bundle authoritatively. If everything resolved, brew bundle
+  # check passes and we stay quiet. Anything still missing is a real failure
+  # we should surface.
   if ! brew bundle check --file="$bundle_target" --no-upgrade >/dev/null 2>&1; then
     printf '\033[1;31mbrew bundle: residual failures after recovery:\033[0m\n' >&2
     brew bundle check --file="$bundle_target" --no-upgrade --verbose >&2 || true

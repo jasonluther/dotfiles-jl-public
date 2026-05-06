@@ -9,6 +9,9 @@
 #                  from "Failed Installing Extensions: foo.bar baz.qux".
 #                  When omitted, falls back to the hardcoded list of known
 #                  problematic extensions.
+#   -- <id> [<id>...]: explicit extension IDs to retry. Used by the
+#                  vscode-extensions chezmoi onchange script when a
+#                  marketplace install fails.
 #
 # Marketplace asset URL pattern (the same one VSCode itself uses):
 #   https://<publisher>.gallery.vsassets.io/_apis/public/gallery/publisher/
@@ -23,10 +26,13 @@ known_unsigned=(
   "stkb.rewrap"
 )
 
-bundle_log="${1:-}"
 declare -a wanted=()
 
-if [[ -n "$bundle_log" && -f "$bundle_log" ]]; then
+if [[ "${1:-}" == "--" ]]; then
+  shift
+  wanted=("$@")
+elif [[ -n "${1:-}" && -f "$1" ]]; then
+  bundle_log="$1"
   # `Failed Installing Extensions: a.b c.d` -> one per line. Take the last
   # occurrence so a retry log overrides earlier output.
   while IFS= read -r ext; do
