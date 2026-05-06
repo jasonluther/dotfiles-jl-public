@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Capture currently-installed VS Code extensions into the chezmoi manifest.
+# Run after installing/removing extensions in VS Code to sync dotfiles-jl-public.
+
+set -euo pipefail
+
+if ! command -v code >/dev/null 2>&1; then
+  echo "error: 'code' not on PATH; cannot list extensions." >&2
+  exit 1
+fi
+if ! command -v chezmoi >/dev/null 2>&1; then
+  echo "error: 'chezmoi' not on PATH." >&2
+  exit 1
+fi
+
+src="$(chezmoi source-path)"
+manifest="$src/packages/vscode-extensions.txt"
+
+if [[ ! -f "$manifest" ]]; then
+  echo "error: $manifest not found." >&2
+  exit 1
+fi
+
+# Find the first non-comment, non-blank line — everything before is preserved as header.
+header_end="$(awk '!/^[[:space:]]*(#|$)/{print NR; exit}' "$manifest")"
+if [[ -z "$header_end" ]]; then
+  header="$(cat "$manifest")"
+else
+  header="$(head -n "$((header_end - 1))" "$manifest")"
+fi
+
+body="$(code --list-extensions | sort)"
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+{ printf '%s\n' "$header"; printf '%s\n' "$body"; } > "$tmp"
+mv "$tmp" "$manifest"
+
+added="$(diff <(grep -vE '^[[:space:]]*(#|$)' "$manifest" 2>/dev/null || true) <(echo "$body") | grep -c '^>' || true)"
+removed="$(diff <(grep -vE '^[[:space:]]*(#|$)' "$manifest" 2>/dev/null || true) <(echo "$body") | grep -c '^<' || true)"
+
+echo "Updated $manifest"
+echo "Review with: cd $src && git diff packages/vscode-extensions.txt"
