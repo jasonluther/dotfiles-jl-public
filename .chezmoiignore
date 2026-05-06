@@ -20,3 +20,8 @@ templates/
 Library/
 .config/cspell/
 {{ end }}
+
+{{ if ne .chezmoi.os "linux" }}
+.config/Code/
+.local/share/code-server/
+{{ end }}
