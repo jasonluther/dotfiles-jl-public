@@ -36,8 +36,5 @@ trap 'rm -f "$tmp"' EXIT
 { printf '%s\n' "$header"; printf '%s\n' "$body"; } > "$tmp"
 mv "$tmp" "$manifest"
 
-added="$(diff <(grep -vE '^[[:space:]]*(#|$)' "$manifest" 2>/dev/null || true) <(echo "$body") | grep -c '^>' || true)"
-removed="$(diff <(grep -vE '^[[:space:]]*(#|$)' "$manifest" 2>/dev/null || true) <(echo "$body") | grep -c '^<' || true)"
-
 echo "Updated $manifest"
 echo "Review with: cd $src && git diff packages/vscode-extensions.txt"
