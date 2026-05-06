@@ -35,6 +35,7 @@ brew "wget"
 brew "xsv"
 brew "yq"
 
+cask "1password-cli"
 cask "basictex"
 cask "flux-app"
 cask "font-commit-mono"
