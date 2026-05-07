@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import filecmp
+import os
 import re
 import shutil
 import subprocess
@@ -37,6 +38,11 @@ from datetime import datetime
 from pathlib import Path
 
 CONFLICT_RE = re.compile(r"\.sync-conflict-\d{8}-\d{6}-[A-Z0-9]+$")
+
+# Skip these directories entirely: .stversions is Syncthing's stale-snapshot
+# archive (not live repos); the others can be huge and never contain repos
+# we care about.
+SKIP_DIR_NAMES = {".stversions", "node_modules", ".venv", ".cache"}
 
 
 def canonical_of(path: Path) -> Path:
@@ -62,22 +68,19 @@ def classify(rel_in_git: Path) -> str:
     return "other"
 
 
-SKIP_DIR_NAMES = {".stversions", "node_modules", ".venv"}
-
-
 def find_repos(root: Path) -> list[Path]:
-    """Return repo roots (dirs containing a real .git/ subdir) under root.
+    """Return repo roots (dirs containing a .git/ subdir) under root.
 
-    Skips Syncthing's .stversions archive (stale snapshots, not live repos)
-    and common dependency dirs that may shadow .git directories.
+    Uses os.walk with in-place directory pruning so we never descend into
+    SKIP_DIR_NAMES or into .git itself (the conflicts inside .git are
+    enumerated separately by find_conflicts).
     """
-    repos: set[Path] = set()
-    for p in root.rglob(".git"):
-        if not p.is_dir():
-            continue
-        if any(part in SKIP_DIR_NAMES for part in p.parts):
-            continue
-        repos.add(p.parent)
+    repos: list[Path] = []
+    for dirpath, dirnames, _ in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIR_NAMES]
+        if ".git" in dirnames and (Path(dirpath) / ".git").is_dir():
+            repos.append(Path(dirpath))
+            dirnames.remove(".git")
     return sorted(repos)
 
 
@@ -211,7 +214,9 @@ def main() -> int:
             else:
                 print(f"  {repo}: clean")
 
-    return 0
+    # Non-zero exit when items still need human review, so periodic runners
+    # (cron / launchd) can alert on it instead of silently succeeding.
+    return 1 if surfaced else 0
 
 
 if __name__ == "__main__":
