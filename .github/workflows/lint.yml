@@ -17,14 +17,14 @@ jobs:
   lint:
     runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
       - name: Cache pre-commit envs
-        uses: actions/cache@v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
@@ -57,20 +57,21 @@ jobs:
 
       - name: pre-commit
         env:
-          SKIP: trailing-whitespace,end-of-file-fixer,check-yaml,check-json,check-toml,check-merge-conflict,detect-private-key,trufflehog,ruff,ruff-format
+          SKIP: trailing-whitespace,end-of-file-fixer,check-yaml,check-json,check-toml,check-merge-conflict,detect-private-key,trufflehog
         run: pre-commit run --all-files --show-diff-on-failure --color=always
 
-      - name: ruff (shebang Python discovery)
+      - name: ruff (shebang Python scripts only)
         run: |
           # shellcheck disable=SC2016
           mapfile -t files < <(
             find . -type f \
-              \( -name '*.py' -o -path '*/bin/executable_*' -o -path '*/hooks/executable_*' \) \
+              \( -path '*/bin/executable_*' -o -path '*/hooks/executable_*' \) \
+              -not -name '*.py' \
               -not -path './.git/*' \
               -not -path './.ruff_cache/*' \
               -print0 | xargs -0 -I{} sh -c 'head -1 "$1" | grep -qE "python" && echo "$1"' _ {}
           )
-          [ ${#files[@]} -eq 0 ] && { echo "no python files"; exit 0; }
+          [ ${#files[@]} -eq 0 ] && { echo "no shebang python scripts"; exit 0; }
           printf '%s\n' "${files[@]}"
           uvx ruff check "${files[@]}"
           uvx ruff format --check "${files[@]}"
