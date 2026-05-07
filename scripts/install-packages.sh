@@ -228,6 +228,15 @@ fi
 # Each handler installs the tool to ~/.local/bin (no sudo) and is idempotent.
 install -d "$HOME/.local/bin"
 
+# Debian/Ubuntu's bat package installs the binary as `batcat` to avoid
+# clashing with the unrelated bacula-console-bat tool. Shell aliases like
+# `cat=bat` (modern-cli.sh) and tools that shell out to `bat` then fail on
+# Linux. Symlink to ~/.local/bin/bat so the brew/apt name divergence stays
+# invisible to the rest of the config.
+if command -v batcat >/dev/null 2>&1 && ! command -v bat >/dev/null 2>&1; then
+  ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
+fi
+
 fallback_ruff() {
   command -v ruff >/dev/null 2>&1 && return 0
   curl -LsSf https://astral.sh/ruff/install.sh | env UV_INSTALL_DIR="$HOME/.local/bin" sh
