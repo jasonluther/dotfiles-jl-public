@@ -17,5 +17,5 @@ done
 # Upgrade pip for all pyenv-managed versions
 for version in $(pyenv versions --bare); do
   echo "Upgrading pip for Python $version..."
-  "$HOME/.pyenv/versions/$version/bin/python" -m pip install --upgrade pip
+  "$HOME/.pyenv/versions/$version/bin/python" -m pip install --upgrade --no-cache-dir pip
 done
