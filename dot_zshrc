@@ -29,6 +29,8 @@ for _fragment in "$HOME/.config/shell"/*.sh; do
 done
 unset _fragment
 
+command -v rbenv >/dev/null && eval "$(rbenv init - zsh)"
+
 eval "$(direnv hook zsh)"
 
 # Warn if dotfiles have drifted from chezmoi source
