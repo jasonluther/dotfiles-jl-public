@@ -28,3 +28,16 @@ fi
 if ! command -v claude >/dev/null 2>&1; then
   curl -fsSL https://claude.ai/install.sh | bash
 fi
+
+# Match macOS, where zsh is the default login shell. Without this the dotfiles'
+# zshrc/zprofile (which add ~/.local/bin to PATH) never run, and tools installed
+# there — including claude above — appear missing.
+if ! command -v zsh >/dev/null 2>&1; then
+  sudo apt-get install -y zsh
+fi
+zsh_path="$(command -v zsh)"
+current_shell="$(getent passwd "$USER" | cut -d: -f7)"
+if [[ "$current_shell" != "$zsh_path" ]]; then
+  sudo chsh -s "$zsh_path" "$USER"
+  echo "==> Default shell changed to zsh. Log out and back in, or run 'exec zsh', to use it." >&2
+fi
