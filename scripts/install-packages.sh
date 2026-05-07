@@ -301,6 +301,21 @@ fallback_yq() {
   chmod +x "$HOME/.local/bin/yq"
 }
 
+fallback_eza() {
+  command -v eza >/dev/null 2>&1 && return 0
+  local ver=0.23.4 arch
+  case "$(uname -m)" in
+    x86_64) arch=x86_64-unknown-linux-gnu ;;
+    aarch64 | arm64) arch=aarch64-unknown-linux-gnu ;;
+    *)
+      echo "eza: unsupported arch $(uname -m)" >&2
+      return 0
+      ;;
+  esac
+  curl -fsSL "https://github.com/eza-community/eza/releases/download/v${ver}/eza_${arch}.tar.gz" \
+    | tar -xz -C "$HOME/.local/bin" ./eza
+}
+
 fallback_lazygit() {
   command -v lazygit >/dev/null 2>&1 && return 0
   local ver=0.61.1 arch
@@ -356,6 +371,7 @@ for pkg in "${skipped[@]:-}" "${forced_fallback[@]:-}"; do
     tldr) fallback_tldr || failed+=("tldr") ;;
     uv) fallback_uv || failed+=("uv") ;;
     yq) fallback_yq || failed+=("yq") ;;
+    eza) fallback_eza || failed+=("eza") ;;
     lazygit) fallback_lazygit || failed+=("lazygit") ;;
     vale) fallback_vale || failed+=("vale") ;;
     prettier) fallback_npm_global prettier || failed+=("prettier") ;;

@@ -91,6 +91,16 @@ export CHEZMOI_EMAIL='smoke@test.local'
 echo "==> chezmoi init (resolves .chezmoi.toml.tmpl → ~/.config/chezmoi/chezmoi.toml)"
 chezmoi --source=/src init
 
+# Validate scripts/linux/base.sh — install.sh runs this before apply on
+# real Linux hosts (gh repo + claude installer + zsh chsh). Running just
+# the `base` module skips ssh-keys/harden-sshd/sudo-nopasswd/tailscale
+# which need network identity and a real systemd to make sense.
+echo "==> linux/setup.sh base (validates base.sh module)"
+if ! bash /src/scripts/linux/setup.sh base; then
+  red "base.sh failed"
+  exit 1
+fi
+
 echo "==> first apply"
 if ! chezmoi --source=/src apply; then
   red "chezmoi apply failed"
@@ -115,6 +125,15 @@ check "~/.zshrc exists"                          test -f "$HOME/.zshrc"
 check "~/.local/bin/start-work-setup exists"     test -f "$HOME/.local/bin/start-work-setup"
 check "~/.local/bin/start-work-setup executable" test -x "$HOME/.local/bin/start-work-setup"
 check "macOS-only ~/Library absent"              test ! -e "$HOME/Library"
+
+# base.sh outcomes
+check "zsh installed"                            command -v zsh
+check "gh installed (apt repo)"                  command -v gh
+check "claude installer ran"                     test -x "$HOME/.local/bin/claude"
+check "default shell is zsh"                    [ "$(getent passwd "$(id -un)" | cut -d: -f7)" = "$(command -v zsh)" ]
+
+# Debian binary-name fixups from install-packages.sh
+check "bat -> batcat symlink"                    test -L "$HOME/.local/bin/bat"
 
 echo "==> second apply (idempotency, --dry-run)"
 # `chezmoi apply --dry-run` emits a line per change it would make. A clean
