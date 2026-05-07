@@ -36,8 +36,11 @@ if ! command -v zsh >/dev/null 2>&1; then
   sudo apt-get install -y zsh
 fi
 zsh_path="$(command -v zsh)"
-current_shell="$(getent passwd "$USER" | cut -d: -f7)"
+# `$USER` isn't always set (Docker containers, su -, some launchd contexts);
+# `id -un` is reliable everywhere.
+current_user="$(id -un)"
+current_shell="$(getent passwd "$current_user" | cut -d: -f7)"
 if [[ "$current_shell" != "$zsh_path" ]]; then
-  sudo chsh -s "$zsh_path" "$USER"
+  sudo chsh -s "$zsh_path" "$current_user"
   echo "==> Default shell changed to zsh. Log out and back in, or run 'exec zsh', to use it." >&2
 fi
