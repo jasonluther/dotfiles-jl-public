@@ -1,0 +1,341 @@
+#!/usr/bin/env python3
+"""finish-pr — push, open/update a PR, watch CI, and merge if green.
+
+Behavior:
+  * Refuses to run on main/master or with a dirty working tree.
+  * Pushes the current branch (--force-with-lease if upstream is set).
+  * Creates a PR if none exists, or reuses an OPEN one.
+  * Polls checks via `gh pr checks --json` until all complete.
+  * On red: prints failing checks with names, URLs, and the tail of failed logs.
+  * On green:
+      - if --reviewer is given, requests review and exits (no merge).
+      - else, merges with --rebase --delete-branch.
+
+Usage:
+    finish-pr                                # title/body derived from commits
+    finish-pr "feat: add foo"                # explicit title
+    finish-pr --reviewer alice               # request review on green, no merge
+    finish-pr --reviewer alice --reviewer bob
+    finish-pr --body "..." "feat: add foo"
+    finish-pr --draft                        # open as draft
+    finish-pr --no-watch                     # push + create PR, then exit
+"""
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+import time
+
+GREEN = "\033[32m"
+RED = "\033[31m"
+YELLOW = "\033[33m"
+DIM = "\033[2m"
+RESET = "\033[0m"
+
+FAILED_STATES = {
+    "FAILURE",
+    "CANCELLED",
+    "TIMED_OUT",
+    "ACTION_REQUIRED",
+    "STARTUP_FAILURE",
+}
+
+_RUN_ID_RE = re.compile(r"/actions/runs/(\d+)")
+
+
+def run(cmd, *, check=True, capture=True):
+    return subprocess.run(cmd, check=check, capture_output=capture, text=True)
+
+
+def out(cmd, *, check=True) -> str:
+    return run(cmd, check=check).stdout.strip()
+
+
+def die(msg: str, code: int = 1):
+    print(f"{RED}error:{RESET} {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def detect_main() -> str:
+    for ref in ("origin/main", "origin/master", "main", "master"):
+        rc = subprocess.run(
+            ["git", "rev-parse", "--verify", ref], capture_output=True
+        ).returncode
+        if rc == 0:
+            return ref.removeprefix("origin/")
+    return "main"
+
+
+def current_branch() -> str:
+    return out(["git", "symbolic-ref", "--short", "HEAD"])
+
+
+def working_tree_clean() -> bool:
+    r = run(["git", "status", "--porcelain"])
+    return r.stdout.strip() == ""
+
+
+def has_upstream() -> bool:
+    rc = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+        capture_output=True,
+    ).returncode
+    return rc == 0
+
+
+def commit_subjects_since(base: str) -> list[str]:
+    r = subprocess.run(
+        ["git", "log", "--format=%s", f"{base}..HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if r.returncode != 0:
+        return []
+    return [line for line in r.stdout.splitlines() if line.strip()]
+
+
+def derive_title(subjects: list[str], branch: str) -> str:
+    if subjects:
+        return subjects[0]
+    return branch.replace("-", " ").replace("_", " ")
+
+
+def derive_body(subjects: list[str]) -> str:
+    if not subjects:
+        return "## Summary\n\n(No commits beyond main yet.)\n"
+    bullets = "\n".join(f"- {s}" for s in subjects)
+    return f"## Summary\n\n{bullets}\n\n## Test plan\n- [ ] Verify expected behavior\n"
+
+
+def gh_pr_view() -> dict | None:
+    r = subprocess.run(
+        ["gh", "pr", "view", "--json", "number,url,state,mergeable"],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        return None
+    try:
+        return json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def push(branch: str):
+    if has_upstream():
+        run(["git", "push", "--force-with-lease", "origin", "HEAD"], capture=False)
+    else:
+        run(["git", "push", "-u", "origin", branch], capture=False)
+
+
+def watch_checks(
+    num: int,
+    poll_interval_s: int = 10,
+    max_total_s: int = 1800,
+    no_checks_grace_s: int = 45,
+) -> bool:
+    """Poll PR checks until they all complete. Returns True iff all green.
+
+    Implements its own poll loop instead of `gh pr checks --watch` because
+    --watch exits immediately when no checks are registered yet (a common
+    race after pushing a new commit), and is also racy across force-pushes.
+    """
+    print(f"{DIM}Watching CI for PR #{num}...{RESET}")
+    start = time.monotonic()
+    last_summary = ""
+    seen_any = False
+    while time.monotonic() - start < max_total_s:
+        checks = fetch_check_results(num)
+        if checks:
+            seen_any = True
+            in_flight = [c for c in checks if c.get("bucket") == "pending"]
+            failed = [c for c in checks if c.get("state") in FAILED_STATES]
+            done = len(checks) - len(in_flight)
+            summary = f"{done}/{len(checks)} done"
+            if summary != last_summary:
+                pending_names = (
+                    ", ".join(c.get("name", "?") for c in in_flight) or "all complete"
+                )
+                print(f"  [{summary}] in flight: {pending_names}")
+                last_summary = summary
+            if not in_flight:
+                return len(failed) == 0
+        elif not seen_any and (time.monotonic() - start) >= no_checks_grace_s:
+            print(
+                f"{YELLOW}No checks registered after {no_checks_grace_s}s — "
+                f"treating as green.{RESET}"
+            )
+            return True
+        time.sleep(poll_interval_s)
+    print(
+        f"{YELLOW}timed out after {max_total_s}s waiting for checks{RESET}",
+        file=sys.stderr,
+    )
+    return False
+
+
+def fetch_check_results(num: int) -> list[dict]:
+    r = subprocess.run(
+        ["gh", "pr", "checks", str(num), "--json", "name,state,link,workflow,bucket"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if r.returncode != 0 or not r.stdout.strip():
+        return []
+    try:
+        return json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return []
+
+
+def show_failure_logs(num: int, tail_lines: int = 60):
+    checks = fetch_check_results(num)
+    failed = [c for c in checks if c.get("state") in FAILED_STATES]
+    if not failed:
+        print(
+            f"{YELLOW}CI watch reported failure but no failed checks were "
+            f"returned by `gh pr checks`. See PR for details.{RESET}",
+            file=sys.stderr,
+        )
+        return
+    print(f"\n{RED}Failed checks ({len(failed)}):{RESET}\n", file=sys.stderr)
+    for c in failed:
+        name = c.get("workflow") or c.get("name") or "?"
+        state = c.get("state", "?")
+        link = c.get("link") or ""
+        print(f"  {RED}✗{RESET} {name} [{state}]  {link}", file=sys.stderr)
+        m = _RUN_ID_RE.search(link)
+        if not m:
+            continue
+        rid = m.group(1)
+        log = subprocess.run(
+            ["gh", "run", "view", rid, "--log-failed"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        body = log.stdout.rstrip()
+        if log.returncode != 0 or not body:
+            continue
+        tail = "\n".join(body.splitlines()[-tail_lines:])
+        print(
+            f"{DIM}--- last {tail_lines} lines of failed log ---{RESET}",
+            file=sys.stderr,
+        )
+        print(tail, file=sys.stderr)
+        print(f"{DIM}--- end ---{RESET}\n", file=sys.stderr)
+
+
+def request_reviewers(num: int, reviewers: list[str]):
+    csv = ",".join(reviewers)
+    run(["gh", "pr", "edit", str(num), "--add-reviewer", csv], capture=False)
+    print(f"{GREEN}Review requested from:{RESET} {csv}")
+
+
+def merge_pr(num: int):
+    print(f"{DIM}Merging PR #{num} (rebase)...{RESET}")
+    r = subprocess.run(["gh", "pr", "merge", str(num), "--rebase", "--delete-branch"])
+    if r.returncode == 0:
+        print(f"{GREEN}Merged ✓{RESET}")
+        return
+    print(
+        f"{YELLOW}retrying without --delete-branch "
+        f"(branch likely checked out in a worktree){RESET}",
+        file=sys.stderr,
+    )
+    r2 = subprocess.run(["gh", "pr", "merge", str(num), "--rebase"])
+    if r2.returncode != 0:
+        die("merge failed")
+    print(f"{GREEN}Merged ✓{RESET} (clean up branch/worktree manually)")
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Push, open or update a PR, watch CI, and merge if green."
+    )
+    ap.add_argument(
+        "title", nargs="?", help="PR title (default: most recent commit subject)"
+    )
+    ap.add_argument("--body", help="PR body (default: derived from commit subjects)")
+    ap.add_argument(
+        "--reviewer",
+        action="append",
+        default=[],
+        metavar="USER",
+        help="GitHub username to request review from (repeatable). "
+        "If given, the PR is NOT auto-merged on green.",
+    )
+    ap.add_argument("--draft", action="store_true", help="Open as draft.")
+    ap.add_argument(
+        "--no-watch",
+        action="store_true",
+        help="Push and create the PR; do not watch CI or merge.",
+    )
+    args = ap.parse_args()
+
+    try:
+        branch = current_branch()
+    except subprocess.CalledProcessError:
+        die("not on a branch (detached HEAD?)")
+
+    if branch in ("main", "master"):
+        die(f"refusing to run on {branch}")
+
+    if not working_tree_clean():
+        die("working tree not clean — commit or stash first")
+
+    main_branch = detect_main()
+
+    print(f"{DIM}Pushing {branch}...{RESET}")
+    push(branch)
+
+    pr = gh_pr_view()
+    if pr and pr.get("state") in ("MERGED", "CLOSED"):
+        die(f"existing PR for {branch} is {pr['state']} — push to a new branch")
+
+    if pr and pr.get("state") == "OPEN":
+        num = pr["number"]
+        url = pr["url"]
+        print(f"{DIM}Reusing open PR #{num}: {url}{RESET}")
+    else:
+        subjects = commit_subjects_since(f"origin/{main_branch}")
+        title = args.title or derive_title(subjects, branch)
+        body = args.body or derive_body(subjects)
+        cmd = ["gh", "pr", "create", "--title", title, "--body", body]
+        if args.draft:
+            cmd.append("--draft")
+        url = out(cmd)
+        print(f"{GREEN}Created PR:{RESET} {url}")
+        pr = gh_pr_view()
+        if not pr:
+            die("PR was created but cannot be re-fetched")
+        num = pr["number"]
+
+    if args.no_watch:
+        print(f"{DIM}--no-watch given; exiting.{RESET}")
+        return
+
+    green = watch_checks(num)
+    if not green:
+        show_failure_logs(num)
+        die(f"CI did not pass — see failures above and {url}", code=2)
+
+    if args.reviewer:
+        request_reviewers(num, args.reviewer)
+        print(f"{DIM}Skipping auto-merge because --reviewer was given.{RESET}")
+        return
+
+    pr2 = gh_pr_view() or {}
+    mergeable = pr2.get("mergeable")
+    if mergeable != "MERGEABLE":
+        die(f"PR is not mergeable (state={mergeable}). Rebase onto main and retry.")
+
+    merge_pr(num)
+
+
+if __name__ == "__main__":
+    main()
