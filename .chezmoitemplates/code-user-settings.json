@@ -14,7 +14,7 @@
   "[xml]": {
     "editor.defaultFormatter": "redhat.vscode-xml"
   },
-  "workbench.colorTheme": "Gruvbox Material Dark",
+  "workbench.colorTheme": "Gruvbox Material Dark (nv-h)",
   "gruvboxMaterial.darkContrast": "medium",
   "editor.fontFamily": "'Geist Mono', 'JetBrains Mono', Menlo, monospace",
   "editor.fontSize": 14,
