@@ -1,0 +1,13 @@
+# Targets chezmoi should remove from the destination on `chezmoi apply`.
+# Use for orphans left behind by deletions in the source tree — chezmoi
+# does NOT auto-remove targets when a source file disappears.
+#
+# Format: one target path per line, relative to the destination dir
+# (typically $HOME). Blank lines and `#` comments allowed. Removed
+# entries can be deleted from this list once all known hosts have applied.
+
+# fzf.sh fragment removed in PR #38 (chore(shell): drop fzf integration).
+# Without this line, the orphan keeps emitting "(eval):1: can't change
+# option: zle" at every interactive zsh startup on machines that already
+# had it deployed.
+.config/shell/fzf.sh
