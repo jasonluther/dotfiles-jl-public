@@ -36,5 +36,18 @@ __pycache__
 .cache
 
 // VCS junk
-.git/index.lock
-.git/objects/pack/tmp_pack_*
+//
+// Goal: replicate enough of .git/ that branches/refs/objects flow between
+// machines, while suppressing the in-flight files that cause sync-conflict
+// noise and (worse) stranded loose objects.
+//
+// Fully synced: refs, packed objects, completed loose objects, config.
+// Excluded:    lock files, atomic-rename temp files, OS metadata.
+//
+// This does NOT prevent legitimate conflicts when both machines write the
+// same ref (e.g. both committing on `main` independently). For that you
+// need single-writer discipline; see resolve-git-sync-conflicts for repair.
+.git/*.lock
+.git/**/*.lock
+.git/objects/*/tmp_*
+.git/objects/pack/tmp_*
