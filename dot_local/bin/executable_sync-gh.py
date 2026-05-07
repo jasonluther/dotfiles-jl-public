@@ -120,6 +120,8 @@ def push_wip(name, dest, hostname):
         check=True,
     ).stdout.strip()
 
+    branch = f"wip/{hostname}"
+
     if dirty:
         snap = subprocess.run(
             ["git", "-C", str(dest), "stash", "create"],
@@ -129,9 +131,36 @@ def push_wip(name, dest, hostname):
         ).stdout.strip()
         ref = snap or "HEAD"
     else:
+        # Clean tree: if origin/wip/<host> already matches HEAD, nothing to
+        # push. The cached refs/remotes/origin/<branch> was just refreshed
+        # by the prior `git pull --ff-only`, so it's accurate enough; a
+        # stale read here only causes a redundant push (no correctness
+        # impact). For dirty trees we always push because each `stash
+        # create` produces a new SHA even with identical content (commit
+        # timestamps differ).
+        head_sha = subprocess.run(
+            ["git", "-C", str(dest), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        cached = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(dest),
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                f"refs/remotes/origin/{branch}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if cached.returncode == 0 and cached.stdout.strip() == head_sha:
+            return  # silent no-op
         ref = "HEAD"
 
-    branch = f"wip/{hostname}"
     push = subprocess.run(
         [
             "git",
