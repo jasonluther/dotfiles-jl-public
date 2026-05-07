@@ -43,7 +43,7 @@ ms-vscode.vscode-speech
 qufiwefefwoyn.kanagawa
 redhat.vscode-xml
 redhat.vscode-yaml
-sainnhe.gruvbox-material
+snrico.gruvbox-material
 stkb.rewrap
 streetsidesoftware.code-spell-checker
 timonwong.shellcheck
