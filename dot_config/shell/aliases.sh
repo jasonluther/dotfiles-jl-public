@@ -2,7 +2,15 @@
 # Sourced from ~/.zshrc via the dot_config/shell/ fragment loader.
 
 # Useful aliases
-alias ls='ls -G'
+# `ls -G` is BSD/macOS-only; GNU coreutils on Linux uses `--color=auto` and
+# rejects -G. Feature-detect once at shell startup so each OS gets the right
+# flag without an explicit `uname` branch.
+if ls --color=auto / >/dev/null 2>&1; then
+  alias ls='ls --color=auto'
+else
+  alias ls='ls -G'
+fi
+alias grep='grep --color=auto'
 alias psg='ps axuw|grep'
 alias web-server='python3 -m http.server'
 alias root='cd $(git rev-parse --show-toplevel 2>/dev/null)'
