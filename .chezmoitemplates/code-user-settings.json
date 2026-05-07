@@ -150,5 +150,6 @@
   "dotenv.enableAutocloaking": false,
   "[json]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
-  }
+  },
+  "remote.autoForwardPortsSource": "hybrid"
 }
