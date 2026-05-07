@@ -17,7 +17,6 @@ donjayamanne.githistory
 donjayamanne.python-extension-pack
 esbenp.prettier-vscode
 foxundermoon.shell-format
-github.copilot-chat
 github.vscode-github-actions
 github.vscode-pull-request-github
 gruntfuggly.todo-tree
