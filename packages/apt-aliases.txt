@@ -1,8 +1,14 @@
 # Name mapping for packages whose apt name differs from their brew name.
 # Format: <brew_name>=<apt_name>, one per line. Blank lines / `#` comments OK.
 #
+# Special RHS values:
+#   __skip__   — skip apt entirely; route to install-packages.sh fallback handler.
+#                Use when apt's package of the same name is the wrong tool
+#                (e.g. apt's `yq` is python-yq, not Mike Farah's Go yq).
+#
 # The install script reads this when translating common.txt for apt-get.
 # Example entries (uncomment if/when the brew name moves into common.txt):
 # fd=fd-find
-# node=nodejs
 # go=golang-go
+node=nodejs
+yq=__skip__

@@ -8,21 +8,30 @@ clang-format
 cmake
 direnv
 dos2unix
+eza
 ffmpeg
 fswatch
 fzf
 gh
 git
+git-delta
 git-filter-repo
 jq
+lazygit
+markdownlint-cli
 miller
 nmap
+node
 pandoc
 pipx
+prettier
 ripgrep
 shfmt
 tmux
 tree
+uv
+vale
+yq
 zoxide
 
 # Best-effort on Linux — older Debian/Ubuntu lack a watchexec apt package.
