@@ -5,7 +5,6 @@ on:
     branches: [main]
   pull_request:
 
-# Cancel a previous in-flight run on the same ref when a new one starts.
 concurrency:
   group: lint-${{ github.ref }}
   cancel-in-progress: true
@@ -15,59 +14,76 @@ concurrency:
 #   gh variable set RUNS_ON --body 'ubuntu-latest' -R jasonluther/dotfiles-jl-public  # revert
 
 jobs:
-  shellcheck:
+  lint:
     runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v6
-      # action-shellcheck auto-discovers shell scripts. We exclude:
-      #  - .chezmoiscripts/         → bash + Jinja templating, won't parse as plain bash
-      #  - dot_config/shell/, dot_zshrc, dot_zprofile → zsh, which shellcheck does not support
-      #  - private_dot_claude/hooks/ → Python scripts that happen to use a `.sh` extension
-      #                                (chezmoi deploys them as ~/.claude/hooks/*.sh).
-      - uses: ludeeus/action-shellcheck@2.0.0
-        env:
-          # SC1091: skip "source file not found" — sources resolve at $HOME at runtime.
-          SHELLCHECK_OPTS: -x -e SC1091
         with:
-          ignore_paths: >-
-            .chezmoiscripts
-            dot_config/shell
-            private_dot_claude/hooks
-          ignore_names: >-
-            dot_zshrc
-            dot_zprofile
+          fetch-depth: 0
 
-  chezmoiscripts:
-    # The shellcheck job above excludes .chezmoiscripts/ because those files
-    # mix bash with Go-template directives ({{ if eq .chezmoi.os "darwin" }}…)
-    # that won't parse as plain bash. To keep them from drifting silently,
-    # render each template through `chezmoi execute-template` and pipe the
-    # result to `bash -n` for a syntax-only check.
-    #
-    # Caveat: CI is ubuntu-latest, so .chezmoi.os = "linux" — only the linux
-    # rendering path is exercised here. Darwin-gated blocks (`{{ if eq
-    # .chezmoi.os "darwin" }}…`) get apply-time validation on the operator's
-    # Mac.
-    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
-    steps:
-      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+          cache: pip
+
+      - name: Cache pre-commit envs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Ensure zsh is available
+        run: |
+          if ! command -v zsh >/dev/null; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends zsh
+          fi
+
       - name: Install chezmoi
         run: |
           sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Initialize chezmoi config from source
-        # `chezmoi init --source=...` evaluates .chezmoi.toml.tmpl and writes
-        # the resolved config to ~/.config/chezmoi/chezmoi.toml so subsequent
-        # `execute-template` calls have the same context as a real apply.
+
+      - name: Install trufflehog
+        run: |
+          install -d "$HOME/.local/bin"
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
+            | sh -s -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: pre-commit
         env:
-          CHEZMOI_NAME: ci
-          CHEZMOI_EMAIL: ci@example.com
-        run: chezmoi init --source="$GITHUB_WORKSPACE"
-      - name: Render and syntax-check .chezmoiscripts/*.tmpl
+          SKIP: trailing-whitespace,end-of-file-fixer,check-yaml,check-json,check-toml,check-merge-conflict,detect-private-key,trufflehog,ruff,ruff-format
+        run: pre-commit run --all-files --show-diff-on-failure --color=always
+
+      - name: ruff (shebang Python discovery)
+        run: |
+          # shellcheck disable=SC2016
+          mapfile -t files < <(
+            find . -type f \
+              \( -name '*.py' -o -path '*/bin/executable_*' -o -path '*/hooks/executable_*' \) \
+              -not -path './.git/*' \
+              -not -path './.ruff_cache/*' \
+              -print0 | xargs -0 -I{} sh -c 'head -1 "$1" | grep -qE "python" && echo "$1"' _ {}
+          )
+          [ ${#files[@]} -eq 0 ] && { echo "no python files"; exit 0; }
+          printf '%s\n' "${files[@]}"
+          uvx ruff check "${files[@]}"
+          uvx ruff format --check "${files[@]}"
+
+      - name: chezmoi template syntax
         env:
           CHEZMOI_NAME: ci
           CHEZMOI_EMAIL: ci@example.com
         run: |
+          chezmoi init --source="$GITHUB_WORKSPACE"
           shopt -s nullglob
           files=(.chezmoiscripts/*.tmpl)
           [ ${#files[@]} -eq 0 ] && { echo "no .chezmoiscripts templates"; exit 0; }
@@ -81,41 +97,7 @@ jobs:
           done
           exit "$fail"
 
-  shfmt:
-    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: mfinelli/setup-shfmt@v4
-      - name: shfmt --diff (bash files)
-        run: |
-          # shellcheck disable=SC2016
-          # $1 in single-quoted sh -c body is intentional (inner shell expands it).
-          mapfile -t files < <(
-            find . -type f \( -name '*.sh' -o -path '*/bin/executable_*' -o -name 'install.sh' \) \
-              -not -path './.git/*' \
-              -not -path './.chezmoiscripts/*' \
-              -not -path './dot_config/shell/*' \
-              -not -name 'dot_zshrc' \
-              -not -name 'dot_zprofile' \
-              -print0 | xargs -0 -I{} sh -c 'head -1 "$1" | grep -qE "^#!.*(/env )?(bash|sh)$" && echo "$1"' _ {}
-          )
-          [ ${#files[@]} -eq 0 ] && { echo "no bash files to check"; exit 0; }
-          printf '%s\n' "${files[@]}"
-          shfmt -i 2 -ci -bn -d "${files[@]}"
-
-  zsh-syntax:
-    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
-    steps:
-      - uses: actions/checkout@v6
-      # Self-hosted runners typically already have zsh; only sudo-install on
-      # hosted runners (ubuntu-latest) where zsh isn't part of the image.
-      - name: Ensure zsh is available
-        run: |
-          if ! command -v zsh >/dev/null; then
-            sudo apt-get update -y
-            sudo apt-get install -y --no-install-recommends zsh
-          fi
-      - name: zsh -n (parser-only check)
+      - name: zsh -n (parser-only)
         run: |
           shopt -s nullglob
           files=(dot_zshrc dot_zprofile dot_config/shell/*.sh)
@@ -125,70 +107,5 @@ jobs:
             zsh -n "$f"
           done
 
-  markdown:
-    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
-    steps:
-      - uses: actions/checkout@v6
-      # Use markdownlint-cli (not -cli2) because cli2 only accepts configs
-      # with specific filenames; ours is named `dot_markdownlintrc` so chezmoi
-      # deploys it as `~/.markdownlintrc`. `npx --yes` keeps this portable
-      # between hosted runners and self-hosted runners without sudo.
-      #
-      # Slash-command definitions under private_dot_claude/commands/ are
-      # instruction text consumed by Claude Code, not rendered docs — they
-      # use intentional formatting (literal spaces inside backticks for git
-      # status flags, trailing ellipses in headings, etc.) that fights
-      # markdownlint's defaults.
-      - run: |
-          npx --yes markdownlint-cli@0.48.0 --config dot_markdownlintrc \
-            --ignore 'templates/**' \
-            --ignore '**/node_modules/**' \
-            --ignore 'private_dot_claude/**' \
-            '**/*.md'
-
-  actionlint:
-    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
-    steps:
-      - uses: actions/checkout@v6
-      - name: Install actionlint
-        run: bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-      - run: ./actionlint -color
-
-  secrets:
-    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          # trufflehog needs full history to scan past commits.
-          fetch-depth: 0
-      - name: Install trufflehog (user-local — no sudo needed on self-hosted runners)
-        run: |
-          install -d "$HOME/.local/bin"
-          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
-            | sh -s -- -b "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - run: trufflehog git --no-update --results=verified,unverified --fail file://.
-
-  ruff:
-    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
-      # Some Python scripts have a `.sh` extension (chezmoi-deployed names like
-      # ~/.claude/hooks/format-on-edit.sh) or no extension at all
-      # (~/.local/bin/start-work-setup). Discover by `python` shebang.
-      - name: ruff check + format (Python files, by shebang)
-        run: |
-          # shellcheck disable=SC2016
-          # $1 in single-quoted sh -c body is intentional (inner shell expands it).
-          mapfile -t files < <(
-            find . -type f \
-              \( -name '*.py' -o -path '*/bin/executable_*' -o -path '*/hooks/executable_*' \) \
-              -not -path './.git/*' \
-              -not -path './.ruff_cache/*' \
-              -print0 | xargs -0 -I{} sh -c 'head -1 "$1" | grep -qE "python" && echo "$1"' _ {}
-          )
-          [ ${#files[@]} -eq 0 ] && { echo "no python files"; exit 0; }
-          printf '%s\n' "${files[@]}"
-          uvx ruff check "${files[@]}"
-          uvx ruff format --check "${files[@]}"
+      - name: trufflehog (full history)
+        run: trufflehog git --no-update --results=verified,unverified --fail file://.
