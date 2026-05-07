@@ -33,7 +33,10 @@ body="$(code --list-extensions | sort)"
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
-{ printf '%s\n' "$header"; printf '%s\n' "$body"; } > "$tmp"
+{
+  printf '%s\n' "$header"
+  printf '%s\n' "$body"
+} >"$tmp"
 mv "$tmp" "$manifest"
 
 echo "Updated $manifest"
