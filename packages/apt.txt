@@ -6,3 +6,8 @@
 # they need to run before chezmoi apply.
 
 build-essential
+
+# `nodejs` (installed via common.txt + alias `node=nodejs`) ships without npm
+# on Debian/Ubuntu — unlike brew's node, which bundles it. Adding npm here
+# keeps the npm.txt-driven global installer working on Linux too.
+npm

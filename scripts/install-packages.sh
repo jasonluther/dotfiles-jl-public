@@ -182,8 +182,17 @@ if [[ -f "$SRC/packages/apt-aliases.txt" ]]; then
 fi
 
 candidates=()
+forced_fallback=()
 for pkg in "${common[@]:-}"; do
-  candidates+=("${alias_map[$pkg]:-$pkg}")
+  apt_name="${alias_map[$pkg]:-$pkg}"
+  # `__skip__` sentinel: apt has the same name but it's the wrong tool
+  # (e.g. apt's `yq` is python-yq, not Mike Farah's Go yq). Bypass apt
+  # and route straight to the fallback handler under the brew name.
+  if [[ "$apt_name" == "__skip__" ]]; then
+    forced_fallback+=("$pkg")
+    continue
+  fi
+  candidates+=("$apt_name")
 done
 read_list apt_only "$SRC/packages/apt.txt"
 candidates+=("${apt_only[@]:-}")
@@ -257,12 +266,91 @@ fallback_tldr() {
   chmod +x "$HOME/.local/bin/tldr"
 }
 
+fallback_uv() {
+  command -v uv >/dev/null 2>&1 && return 0
+  curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$HOME/.local/bin" sh
+}
+
+fallback_yq() {
+  # apt's `yq` is python-yq (a jq wrapper). We want Mike Farah's Go yq.
+  # The forced-fallback path means we get here even if `yq` is on PATH —
+  # check the binary's identity, not just presence.
+  if command -v yq >/dev/null 2>&1 && yq --version 2>&1 | grep -qiE 'mikefarah|github\.com/mikefarah/yq'; then
+    return 0
+  fi
+  local ver=4.53.2 arch
+  case "$(uname -m)" in
+    x86_64) arch=amd64 ;;
+    aarch64 | arm64) arch=arm64 ;;
+    *)
+      echo "yq: unsupported arch $(uname -m)" >&2
+      return 0
+      ;;
+  esac
+  curl -fsSL -o "$HOME/.local/bin/yq" \
+    "https://github.com/mikefarah/yq/releases/download/v${ver}/yq_linux_${arch}"
+  chmod +x "$HOME/.local/bin/yq"
+}
+
+fallback_lazygit() {
+  command -v lazygit >/dev/null 2>&1 && return 0
+  local ver=0.61.1 arch
+  case "$(uname -m)" in
+    x86_64) arch=Linux_x86_64 ;;
+    aarch64 | arm64) arch=Linux_arm64 ;;
+    *)
+      echo "lazygit: unsupported arch $(uname -m)" >&2
+      return 0
+      ;;
+  esac
+  curl -fsSL "https://github.com/jesseduffield/lazygit/releases/download/v${ver}/lazygit_${ver}_${arch}.tar.gz" \
+    | tar -xz -C "$HOME/.local/bin" lazygit
+}
+
+fallback_vale() {
+  command -v vale >/dev/null 2>&1 && return 0
+  local ver=3.14.1 arch
+  case "$(uname -m)" in
+    x86_64) arch=Linux_64-bit ;;
+    aarch64 | arm64) arch=Linux_arm64 ;;
+    *)
+      echo "vale: unsupported arch $(uname -m)" >&2
+      return 0
+      ;;
+  esac
+  curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${ver}/vale_${ver}_${arch}.tar.gz" \
+    | tar -xz -C "$HOME/.local/bin" vale
+}
+
+fallback_npm_global() {
+  local pkg="$1" bin="${2:-$1}"
+  command -v "$bin" >/dev/null 2>&1 && return 0
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "$pkg: npm not on PATH; skipping" >&2
+    return 1
+  fi
+  # `npm install -g` would target /usr/lib/node_modules and require sudo.
+  # Configure ~/.npm-global as the prefix so install lands in $HOME, then
+  # symlink the binary into ~/.local/bin (which is on PATH via dot_zshrc).
+  local prefix="$HOME/.npm-global"
+  install -d "$prefix"
+  npm config set prefix "$prefix" >/dev/null
+  npm install -g "$pkg"
+  ln -sf "$prefix/bin/$bin" "$HOME/.local/bin/$bin"
+}
+
 declare -a still_skipped=()
-for pkg in "${skipped[@]:-}"; do
+for pkg in "${skipped[@]:-}" "${forced_fallback[@]:-}"; do
   case "$pkg" in
     ruff) fallback_ruff || failed+=("ruff") ;;
     watchexec) fallback_watchexec || failed+=("watchexec") ;;
     tldr) fallback_tldr || failed+=("tldr") ;;
+    uv) fallback_uv || failed+=("uv") ;;
+    yq) fallback_yq || failed+=("yq") ;;
+    lazygit) fallback_lazygit || failed+=("lazygit") ;;
+    vale) fallback_vale || failed+=("vale") ;;
+    prettier) fallback_npm_global prettier || failed+=("prettier") ;;
+    markdownlint-cli) fallback_npm_global markdownlint-cli markdownlint || failed+=("markdownlint-cli") ;;
     *) still_skipped+=("$pkg") ;;
   esac
 done
