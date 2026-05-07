@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Thin wrapper for scripts/dev-setup.sh. Reruns when dev-setup.sh changes.
+#
+# Only runs when the chezmoi source is a git checkout (i.e., the user is
+# hacking on the dotfiles repo here, not deploying from an archive) AND
+# pre-commit is available. Skips silently otherwise so non-dev apply
+# targets aren't affected.
+#
+# scripts/dev-setup.sh hash: {{ include "scripts/dev-setup.sh" | sha256sum }}
+
+set -uo pipefail
+
+SRC={{ .chezmoi.sourceDir | quote }}
+
+[[ -d "$SRC/.git" ]] || exit 0
+command -v pre-commit >/dev/null 2>&1 || exit 0
+
+# Warn-and-continue on failure rather than exec — a stale, unexpected
+# core.hooksPath (e.g. set by some other tool, or synced from another
+# machine) shouldn't be allowed to break the entire chezmoi apply.
+if ! "$SRC/scripts/dev-setup.sh"; then
+  echo "warning: dev-setup.sh exited non-zero; continuing chezmoi apply." >&2
+fi

@@ -1,5 +1,5 @@
 # Local pre-commit gates that mirror .github/workflows/lint.yml.
-# Install once: `pre-commit install`.
+# Install once: `scripts/dev-setup.sh` (handles a core.hooksPath quirk).
 # Run on the whole repo: `pre-commit run --all-files`.
 #
 # Note: the templates under templates/ have their own pre-commit-config.yaml.jinja
