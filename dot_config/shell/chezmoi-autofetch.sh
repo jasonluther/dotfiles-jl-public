@@ -26,8 +26,12 @@ _caf_log="$_caf_state/log"
 # still picks up yesterday's push.
 _caf_interval=21600
 
-_caf_mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0; }
-_caf_size() { stat -f %z "$1" 2>/dev/null || stat -c %s "$1" 2>/dev/null || echo 0; }
+# GNU `stat -c` first, BSD `stat -f` fallback. The reverse order silently
+# misbehaves on Linux: GNU stat has both flags, but `-f` means "filesystem
+# info" not "format" — `-f %m` returns a mount-point path, breaking the
+# arithmetic on line 50.
+_caf_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
+_caf_size() { stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null || echo 0; }
 _caf_now() { echo "${EPOCHSECONDS:-$(date +%s)}"; }
 
 _caf_cleanup() {
@@ -39,15 +43,15 @@ _caf_cleanup() {
   _caf_cleanup
   return 0 2>/dev/null
 }
-[ -d "$_caf_state" ] || mkdir -p "$_caf_state" 2>/dev/null ||
-  {
+[ -d "$_caf_state" ] || mkdir -p "$_caf_state" 2>/dev/null \
+  || {
     _caf_cleanup
     return 0 2>/dev/null
   }
 
 # Rate-limit gate: bail before forking the worker if we ran recently.
-if [ -f "$_caf_stamp" ] &&
-  [ $(($(_caf_now) - $(_caf_mtime "$_caf_stamp"))) -lt "$_caf_interval" ]; then
+if [ -f "$_caf_stamp" ] \
+  && [ $(($(_caf_now) - $(_caf_mtime "$_caf_stamp"))) -lt "$_caf_interval" ]; then
   _caf_cleanup
   return 0 2>/dev/null
 fi
@@ -56,8 +60,8 @@ fi
   # mkdir is atomic across POSIX (no flock on stock macOS). Reap a stale
   # lock from a crashed previous run.
   _lock="$_caf_state/lock.d"
-  if [ -d "$_lock" ] &&
-    [ $(($(_caf_now) - $(_caf_mtime "$_lock"))) -gt 3600 ]; then
+  if [ -d "$_lock" ] \
+    && [ $(($(_caf_now) - $(_caf_mtime "$_lock"))) -gt 3600 ]; then
     rmdir "$_lock" 2>/dev/null
   fi
   mkdir "$_lock" 2>/dev/null || exit 0
@@ -75,8 +79,8 @@ fi
 
   # A stash + pop would race the user's editor. The dot_zshrc drift
   # warning already nags about uncommitted source-repo work.
-  if ! git diff --quiet HEAD 2>/dev/null ||
-    [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+  if ! git diff --quiet HEAD 2>/dev/null \
+    || [ -n "$(git status --porcelain 2>/dev/null)" ]; then
     _log "skip: working tree dirty"
     _stamp_and_exit
   fi
