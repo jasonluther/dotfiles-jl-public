@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Install VSCode extensions that brew bundle couldn't install because the
-# marketplace metadata says they're unsigned (NotSigned signature error).
-# We download the .vsix directly from the marketplace; `code
-# --install-extension <path>` skips the signature check for local files.
+# Install VSCode extensions that the default installer marketplace can't
+# provide. Two scenarios:
+#   - macOS `code`: marketplace says NotSigned (signature error).
+#   - Linux `code-server`: extension isn't on Open VSX (most Microsoft and
+#     some proprietary publishers).
+# We download the .vsix directly from Microsoft's marketplace and install
+# from the local file, which bypasses both the signature check and the
+# Open-VSX-vs-MS-marketplace gap.
 #
 # Args:
 #   $1 (optional): path to a brew bundle log; failed extensions are parsed
@@ -48,8 +52,12 @@ fi
 # Fall back to known-bad list if log parsing yielded nothing.
 ((${#wanted[@]} == 0)) && wanted=("${known_unsigned[@]}")
 
-if ! command -v code >/dev/null 2>&1; then
-  echo "vsix-fallback: 'code' not on PATH; skipping." >&2
+if command -v code >/dev/null 2>&1; then
+  installer=code
+elif command -v code-server >/dev/null 2>&1; then
+  installer=code-server
+else
+  echo "vsix-fallback: neither 'code' nor 'code-server' on PATH; skipping." >&2
   exit 0
 fi
 
@@ -58,7 +66,7 @@ tmpdir="$(mktemp -d -t vsix.XXXXXX)"
 trap 'rm -rf "$tmpdir"' EXIT
 
 for ext in "${wanted[@]}"; do
-  if code --list-extensions 2>/dev/null | grep -ixq "$ext"; then
+  if "$installer" --list-extensions 2>/dev/null | grep -ixq "$ext"; then
     echo "vsix-fallback: $ext already installed, skipping."
     continue
   fi
@@ -80,8 +88,8 @@ for ext in "${wanted[@]}"; do
     continue
   fi
 
-  echo "==> code --install-extension $vsix"
-  if ! code --install-extension "$vsix" --force; then
+  echo "==> $installer --install-extension $vsix"
+  if ! "$installer" --install-extension "$vsix" --force; then
     failed+=("$ext")
   fi
 done

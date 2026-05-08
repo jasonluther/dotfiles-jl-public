@@ -2,9 +2,7 @@
 # Install VS Code / code-server extensions listed in packages/vscode-extensions.txt.
 #
 # manifest hash:       {{ include "packages/vscode-extensions.txt" | sha256sum }}
-{{- if eq .chezmoi.os "darwin" }}
-# vsix-fallback hash:  {{ include "scripts/macos/install-vscode-vsix-fallback.sh" | sha256sum }}
-{{- end }}
+# vsix-fallback hash:  {{ include "scripts/install-vscode-vsix-fallback.sh" | sha256sum }}
 
 set -euo pipefail
 
@@ -42,15 +40,15 @@ for installer in "${installers[@]}"; do
   done
 done
 
-{{- if eq .chezmoi.os "darwin" }}
-# On macOS, retry failures via the vsix-fallback script (handles NotSigned).
-if ((${#failed_ids[@]} > 0)) && [[ -x "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" ]]; then
+# Retry failures via the vsix-fallback script. Handles macOS NotSigned and
+# Linux code-server's Open-VSX-vs-MS-marketplace gap by downloading the
+# .vsix from Microsoft's marketplace and installing it locally.
+if ((${#failed_ids[@]} > 0)) && [[ -x "$SRC/scripts/install-vscode-vsix-fallback.sh" ]]; then
   echo "==> retrying ${#failed_ids[@]} extension(s) via vsix-fallback"
-  if "$SRC/scripts/macos/install-vscode-vsix-fallback.sh" -- "${!failed_ids[@]}" >/dev/null 2>&1; then
+  if "$SRC/scripts/install-vscode-vsix-fallback.sh" -- "${!failed_ids[@]}" >/dev/null 2>&1; then
     failed_ids=()
   fi
 fi
-{{- end }}
 
 if ((${#failed_ids[@]} > 0)); then
   printf '\033[1;31mvscode-extensions: failed to install:\033[0m\n' >&2
