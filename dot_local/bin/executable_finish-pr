@@ -39,13 +39,14 @@ YELLOW = "\033[33m"
 DIM = "\033[2m"
 RESET = "\033[0m"
 
-FAILED_STATES = {
+FAILED_CONCLUSIONS = {
     "FAILURE",
     "CANCELLED",
     "TIMED_OUT",
     "ACTION_REQUIRED",
     "STARTUP_FAILURE",
 }
+FAILED_STATUS_CONTEXT_STATES = {"FAILURE", "ERROR"}
 
 _RUN_ID_RE = re.compile(r"/actions/runs/(\d+)")
 
@@ -179,15 +180,77 @@ def gh_pr_view() -> dict | None:
         return None
 
 
-def push(branch: str):
+def push(branch: str) -> str:
+    """Push HEAD; return the SHA the upstream now points at."""
     if has_upstream():
         run(["git", "push", "--force-with-lease", "origin", "HEAD"], capture=False)
     else:
         run(["git", "push", "-u", "origin", branch], capture=False)
+    return out(["git", "rev-parse", "HEAD"])
+
+
+def fetch_check_results(num: int, expected_sha: str | None = None) -> list[dict]:
+    """Return normalized check entries for the PR's head commit.
+
+    Uses `gh pr view --json statusCheckRollup,headRefOid` instead of
+    `gh pr checks`. The rollup is sha-scoped, so when expected_sha is set
+    we skip stale results from the previous push: GitHub takes a moment
+    to reindex the PR head after a force-push, and during that window
+    `gh pr checks` happily returns the previous run's terminal state.
+
+    Returns [] when the PR's head doesn't match expected_sha yet, or
+    when the rollup is empty — callers treat both as "no checks yet."
+
+    Each returned dict has: name, workflow, link, in_flight, failed, state.
+    """
+    r = subprocess.run(
+        ["gh", "pr", "view", str(num), "--json", "headRefOid,statusCheckRollup"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if r.returncode != 0 or not r.stdout.strip():
+        return []
+    try:
+        data = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return []
+    if expected_sha and data.get("headRefOid") != expected_sha:
+        return []
+    results: list[dict] = []
+    for c in data.get("statusCheckRollup") or []:
+        kind = c.get("__typename")
+        if kind == "CheckRun":
+            status = c.get("status")
+            conclusion = c.get("conclusion")
+            results.append(
+                {
+                    "name": c.get("name") or "?",
+                    "workflow": c.get("workflowName"),
+                    "link": c.get("detailsUrl") or "",
+                    "in_flight": status != "COMPLETED",
+                    "failed": conclusion in FAILED_CONCLUSIONS,
+                    "state": conclusion or status or "?",
+                }
+            )
+        elif kind == "StatusContext":
+            state = c.get("state")
+            results.append(
+                {
+                    "name": c.get("context") or "?",
+                    "workflow": None,
+                    "link": c.get("targetUrl") or "",
+                    "in_flight": state in ("PENDING", "EXPECTED"),
+                    "failed": state in FAILED_STATUS_CONTEXT_STATES,
+                    "state": state or "?",
+                }
+            )
+    return results
 
 
 def watch_checks(
     num: int,
+    expected_sha: str | None = None,
     poll_interval_s: int = 10,
     max_total_s: int = 1800,
     no_checks_grace_s: int = 45,
@@ -197,22 +260,24 @@ def watch_checks(
     Implements its own poll loop instead of `gh pr checks --watch` because
     --watch exits immediately when no checks are registered yet (a common
     race after pushing a new commit), and is also racy across force-pushes.
+    Pinning to expected_sha avoids the force-push race where the previous
+    run's terminal state is briefly returned for the new head.
     """
     print(f"{DIM}Watching CI for PR #{num}...{RESET}")
     start = time.monotonic()
     last_summary = ""
     seen_any = False
     while time.monotonic() - start < max_total_s:
-        checks = fetch_check_results(num)
+        checks = fetch_check_results(num, expected_sha=expected_sha)
         if checks:
             seen_any = True
-            in_flight = [c for c in checks if c.get("bucket") == "pending"]
-            failed = [c for c in checks if c.get("state") in FAILED_STATES]
+            in_flight = [c for c in checks if c["in_flight"]]
+            failed = [c for c in checks if c["failed"]]
             done = len(checks) - len(in_flight)
             summary = f"{done}/{len(checks)} done"
             if summary != last_summary:
                 pending_names = (
-                    ", ".join(c.get("name", "?") for c in in_flight) or "all complete"
+                    ", ".join(c["name"] for c in in_flight) or "all complete"
                 )
                 print(f"  [{summary}] in flight: {pending_names}")
                 last_summary = summary
@@ -232,36 +297,21 @@ def watch_checks(
     return False
 
 
-def fetch_check_results(num: int) -> list[dict]:
-    r = subprocess.run(
-        ["gh", "pr", "checks", str(num), "--json", "name,state,link,workflow,bucket"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if r.returncode != 0 or not r.stdout.strip():
-        return []
-    try:
-        return json.loads(r.stdout)
-    except json.JSONDecodeError:
-        return []
-
-
-def show_failure_logs(num: int, tail_lines: int = 60):
-    checks = fetch_check_results(num)
-    failed = [c for c in checks if c.get("state") in FAILED_STATES]
+def show_failure_logs(num: int, expected_sha: str | None = None, tail_lines: int = 60):
+    checks = fetch_check_results(num, expected_sha=expected_sha)
+    failed = [c for c in checks if c["failed"]]
     if not failed:
         print(
-            f"{YELLOW}CI watch reported failure but no failed checks were "
-            f"returned by `gh pr checks`. See PR for details.{RESET}",
+            f"{YELLOW}CI watch reported failure but the PR's status check "
+            f"rollup is empty. See PR for details.{RESET}",
             file=sys.stderr,
         )
         return
     print(f"\n{RED}Failed checks ({len(failed)}):{RESET}\n", file=sys.stderr)
     for c in failed:
-        name = c.get("workflow") or c.get("name") or "?"
-        state = c.get("state", "?")
-        link = c.get("link") or ""
+        name = c.get("workflow") or c["name"]
+        state = c["state"]
+        link = c["link"]
         print(f"  {RED}✗{RESET} {name} [{state}]  {link}", file=sys.stderr)
         m = _RUN_ID_RE.search(link)
         if not m:
@@ -356,7 +406,7 @@ def main():
     main_branch = detect_main()
 
     print(f"{DIM}Pushing {branch}...{RESET}")
-    push(branch)
+    head_sha = push(branch)
 
     pr = gh_pr_view()
     if pr and pr.get("state") in ("MERGED", "CLOSED"):
@@ -384,9 +434,9 @@ def main():
         print(f"{DIM}--no-watch given; exiting.{RESET}")
         return
 
-    green = watch_checks(num)
+    green = watch_checks(num, expected_sha=head_sha)
     if not green:
-        show_failure_logs(num)
+        show_failure_logs(num, expected_sha=head_sha)
         die(f"CI did not pass — see failures above and {url}", code=2)
 
     if args.reviewer:
