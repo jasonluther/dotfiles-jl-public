@@ -2,7 +2,10 @@
 """finish-pr — push, open/update a PR, watch CI, and merge if green.
 
 Behavior:
-  * Refuses to run on main/master or with a dirty working tree.
+  * Refuses to run with a dirty working tree.
+  * If invoked from main/master, finds the lone non-main worktree and
+    operates on that. With --branch BRANCH, picks the matching worktree.
+    With 0 or 2+ candidates, exits and prints the candidates.
   * Pushes the current branch (--force-with-lease if upstream is set).
   * Creates a PR if none exists, or reuses an OPEN one.
   * Polls checks via `gh pr checks --json` until all complete.
@@ -14,6 +17,7 @@ Behavior:
 Usage:
     finish-pr                                # title/body derived from commits
     finish-pr "feat: add foo"                # explicit title
+    finish-pr --branch fix-foo               # operate on a specific worktree
     finish-pr --reviewer alice               # request review on green, no merge
     finish-pr --reviewer alice --reviewer bob
     finish-pr --body "..." "feat: add foo"
@@ -23,6 +27,7 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -70,6 +75,56 @@ def detect_main() -> str:
 
 def current_branch() -> str:
     return out(["git", "symbolic-ref", "--short", "HEAD"])
+
+
+def list_worktrees() -> list[dict]:
+    """Parse `git worktree list --porcelain` into [{path, branch}, ...].
+
+    Skips bare and detached worktrees (no branch).
+    """
+    r = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if r.returncode != 0:
+        return []
+    worktrees: list[dict] = []
+    cur: dict = {}
+    for line in r.stdout.splitlines():
+        if line.startswith("worktree "):
+            if cur.get("path") and cur.get("branch"):
+                worktrees.append(cur)
+            cur = {"path": line[len("worktree ") :]}
+        elif line.startswith("branch "):
+            cur["branch"] = line[len("branch ") :].removeprefix("refs/heads/")
+        elif line.startswith("bare") or line.startswith("detached"):
+            cur.pop("branch", None)
+    if cur.get("path") and cur.get("branch"):
+        worktrees.append(cur)
+    return worktrees
+
+
+def pick_worktree(branch_filter: str | None) -> dict:
+    """Return the non-main worktree to operate on, or die with guidance."""
+    worktrees = list_worktrees()
+    candidates = [w for w in worktrees if w["branch"] not in ("main", "master")]
+    if branch_filter:
+        match = [w for w in candidates if w["branch"] == branch_filter]
+        if not match:
+            names = ", ".join(w["branch"] for w in candidates) or "(none)"
+            die(f"no worktree on branch {branch_filter!r}. available: {names}")
+        return match[0]
+    if len(candidates) == 1:
+        return candidates[0]
+    if not candidates:
+        die(
+            "on main but no feature worktrees found. "
+            "create one with `git worktree add` or check out a branch."
+        )
+    listing = "\n".join(f"  - {w['branch']}  ({w['path']})" for w in candidates)
+    die("multiple feature worktrees found; rerun with --branch BRANCH:\n" + listing)
 
 
 def working_tree_clean() -> bool:
@@ -275,6 +330,13 @@ def main():
         action="store_true",
         help="Push and create the PR; do not watch CI or merge.",
     )
+    ap.add_argument(
+        "--branch",
+        "-b",
+        metavar="BRANCH",
+        help="When invoked from main, operate on this branch's worktree "
+        "instead of auto-selecting.",
+    )
     args = ap.parse_args()
 
     try:
@@ -282,8 +344,11 @@ def main():
     except subprocess.CalledProcessError:
         die("not on a branch (detached HEAD?)")
 
-    if branch in ("main", "master"):
-        die(f"refusing to run on {branch}")
+    if branch in ("main", "master") or args.branch:
+        wt = pick_worktree(args.branch)
+        print(f"{DIM}Switching to worktree {wt['path']} ({wt['branch']}){RESET}")
+        os.chdir(wt["path"])
+        branch = wt["branch"]
 
     if not working_tree_clean():
         die("working tree not clean — commit or stash first")
