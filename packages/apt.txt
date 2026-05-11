@@ -7,6 +7,11 @@
 
 build-essential
 
+# Login shell — dot_zshrc/dot_zprofile are useless without it. macOS ships
+# zsh by default, but Debian/Ubuntu defaults to bash. The chsh-to-zsh
+# chezmoi script switches the login shell after install.
+zsh
+
 # `nodejs` (installed via common.txt + alias `node=nodejs`) ships without npm
 # on Debian/Ubuntu — unlike brew's node, which bundles it. Adding npm here
 # keeps the npm.txt-driven global installer working on Linux too.
