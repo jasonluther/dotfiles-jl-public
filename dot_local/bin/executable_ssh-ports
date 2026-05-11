@@ -3,6 +3,7 @@
 
 Each port spec is one of:
     PORT                 -> -L PORT:localhost:PORT
+    START-END            -> one -L per port in [START, END]
     LPORT:RPORT          -> -L LPORT:localhost:RPORT
     LPORT:RHOST:RPORT    -> -L LPORT:RHOST:RPORT  (passed through verbatim)
 
@@ -10,6 +11,7 @@ Anything after `--` is forwarded to ssh unchanged.
 
 Examples:
     ssh-ports myhost 1000 1003 1006
+    ssh-ports myhost 3000-3020
     ssh-ports myhost 8080:80 5432
     ssh-ports myhost 1000 -- -N -f          # background tunnel, no shell
 """
@@ -17,15 +19,30 @@ Examples:
 import os
 import sys
 
+RANGE_LIMIT = 256
 
-def parse_spec(spec: str) -> str:
+
+def expand_spec(spec: str) -> list[str]:
     parts = spec.split(":")
-    if len(parts) == 1 and parts[0].isdigit():
-        return f"{parts[0]}:localhost:{parts[0]}"
+    if len(parts) == 1:
+        port = parts[0]
+        if port.isdigit():
+            return [f"{port}:localhost:{port}"]
+        if "-" in port:
+            lo_s, hi_s = port.split("-", 1)
+            if lo_s.isdigit() and hi_s.isdigit():
+                lo, hi = int(lo_s), int(hi_s)
+                if lo > hi:
+                    sys.exit(f"ssh-ports: empty range {spec!r}")
+                if hi - lo + 1 > RANGE_LIMIT:
+                    sys.exit(
+                        f"ssh-ports: range {spec!r} exceeds {RANGE_LIMIT} ports"
+                    )
+                return [f"{p}:localhost:{p}" for p in range(lo, hi + 1)]
     if len(parts) == 2 and all(p.isdigit() for p in parts):
-        return f"{parts[0]}:localhost:{parts[1]}"
+        return [f"{parts[0]}:localhost:{parts[1]}"]
     if len(parts) == 3 and parts[0].isdigit() and parts[2].isdigit():
-        return spec
+        return [spec]
     sys.exit(f"ssh-ports: bad port spec {spec!r}")
 
 
@@ -46,7 +63,8 @@ def main() -> None:
 
     cmd = ["ssh"]
     for s in specs:
-        cmd += ["-L", parse_spec(s)]
+        for fwd in expand_spec(s):
+            cmd += ["-L", fwd]
     cmd += extra + [host]
 
     print(" ".join(cmd), file=sys.stderr)
