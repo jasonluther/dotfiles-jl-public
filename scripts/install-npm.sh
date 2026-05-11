@@ -21,6 +21,11 @@ while IFS= read -r line; do
 done <"$list"
 
 if [[ ${#pkgs[@]} -gt 0 ]]; then
-  echo "==> npm install -g (${#pkgs[@]} packages)"
+  # Install into ~/.npm-global so apt-installed node doesn't need sudo for -g.
+  # dot_zshrc puts ~/.npm-global/bin on PATH.
+  prefix="$HOME/.npm-global"
+  install -d "$prefix"
+  npm config set prefix "$prefix" >/dev/null
+  echo "==> npm install -g (${#pkgs[@]} packages, prefix=$prefix)"
   npm install -g "${pkgs[@]}"
 fi

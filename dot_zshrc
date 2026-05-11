@@ -1,5 +1,5 @@
 # Add local bin to PATH (before venv activation so claude etc. are always available)
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
 
 # 1Password SSH agent (only set if the socket exists)
 _OP_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
