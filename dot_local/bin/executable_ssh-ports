@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""ssh-ports — ssh to HOST with one -L per port spec.
+
+Each port spec is one of:
+    PORT                 -> -L PORT:localhost:PORT
+    LPORT:RPORT          -> -L LPORT:localhost:RPORT
+    LPORT:RHOST:RPORT    -> -L LPORT:RHOST:RPORT  (passed through verbatim)
+
+Anything after `--` is forwarded to ssh unchanged.
+
+Examples:
+    ssh-ports myhost 1000 1003 1006
+    ssh-ports myhost 8080:80 5432
+    ssh-ports myhost 1000 -- -N -f          # background tunnel, no shell
+"""
+
+import os
+import sys
+
+
+def parse_spec(spec: str) -> str:
+    parts = spec.split(":")
+    if len(parts) == 1 and parts[0].isdigit():
+        return f"{parts[0]}:localhost:{parts[0]}"
+    if len(parts) == 2 and all(p.isdigit() for p in parts):
+        return f"{parts[0]}:localhost:{parts[1]}"
+    if len(parts) == 3 and parts[0].isdigit() and parts[2].isdigit():
+        return spec
+    sys.exit(f"ssh-ports: bad port spec {spec!r}")
+
+
+def main() -> None:
+    args = sys.argv[1:]
+    if not args or args[0] in ("-h", "--help"):
+        sys.exit(__doc__)
+
+    host, rest = args[0], args[1:]
+    if "--" in rest:
+        i = rest.index("--")
+        specs, extra = rest[:i], rest[i + 1 :]
+    else:
+        specs, extra = rest, []
+
+    if not specs:
+        sys.exit("ssh-ports: need at least one port")
+
+    cmd = ["ssh"]
+    for s in specs:
+        cmd += ["-L", parse_spec(s)]
+    cmd += extra + [host]
+
+    print(" ".join(cmd), file=sys.stderr)
+    os.execvp("ssh", cmd)
+
+
+if __name__ == "__main__":
+    main()
