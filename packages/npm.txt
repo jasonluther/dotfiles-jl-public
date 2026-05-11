@@ -3,3 +3,8 @@
 #
 # Node is installed via Brewfile (macOS) or apt (`nodejs` package on Debian
 # — add to apt.txt + apt-aliases.txt when needed).
+#
+# Installed into ~/.npm-global (see scripts/install-npm.sh) to avoid sudo
+# on apt-installed node. dot_zshrc puts ~/.npm-global/bin on PATH.
+
+@devcontainers/cli
