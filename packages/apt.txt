@@ -12,7 +12,8 @@ build-essential
 # chezmoi script switches the login shell after install.
 zsh
 
-# `nodejs` (installed via common.txt + alias `node=nodejs`) ships without npm
-# on Debian/Ubuntu — unlike brew's node, which bundles it. Adding npm here
-# keeps the npm.txt-driven global installer working on Linux too.
-npm
+# Node.js comes via NodeSource (scripts/linux/setup-nodesource.sh, run
+# before this installer by the `00-nodesource` chezmoi script). NodeSource's
+# nodejs package bundles npm, so the apt `npm` package isn't needed.
+# `nodejs` itself is listed in common.txt; the NodeSource repo controls
+# which major version apt installs.
