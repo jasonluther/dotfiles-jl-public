@@ -6,6 +6,5 @@
 640199958 Developer
 1381004916 Discovery
 472226235 LanScan
-1453365242 P-touch Editor
 803453959 Slack
 1497506650 Yubico Authenticator
