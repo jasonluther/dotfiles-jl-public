@@ -4,6 +4,10 @@
 Reads tool input from stdin; exits 2 to block Edit/Write calls targeting
 files inside the main worktree. Best-effort — won't catch every Bash
 side-effect, but prevents the most common accidents.
+
+Escape hatch: a `.main-edit-ok` file at the root of the main worktree
+disables the block for that repo (e.g. dotfiles repos where main is the
+working branch).
 """
 
 import json
@@ -53,6 +57,11 @@ def main() -> None:
         return
 
     main_real = realpath(main_worktree)
+
+    # Per-repo opt-out: a `.main-edit-ok` marker at the main worktree root
+    # disables the block (e.g. dotfiles repos where main is the working branch).
+    if os.path.exists(os.path.join(main_real, ".main-edit-ok")):
+        return
 
     # Extract the file_path from tool input.
     file_path = data.get("tool_input", {}).get("file_path", "")
