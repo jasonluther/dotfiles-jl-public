@@ -7,6 +7,12 @@
 
 build-essential
 
+# 1Password CLI (`op`). Lives in 1Password's apt repo, not Debian's —
+# scripts/linux/setup-1password-cli.sh registers the source list and
+# signing key before install-packages.sh runs. The macOS install is
+# handled by the `1password-cli` cask in the Brewfile.
+1password-cli
+
 # Login shell — dot_zshrc/dot_zprofile are useless without it. macOS ships
 # zsh by default, but Debian/Ubuntu defaults to bash. The chsh-to-zsh
 # chezmoi script switches the login shell after install.
