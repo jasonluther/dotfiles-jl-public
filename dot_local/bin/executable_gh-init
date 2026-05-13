@@ -11,7 +11,7 @@
 # Behavior:
 # - If repo has no commits yet and stdin is a TTY, prompt for template choice
 #   (unless --template or --no-template was passed).
-# - Templates live at $DOTFILES_PUBLIC_DIR (default: $HOME/Code/gh/dotfiles-jl-public).
+# - Templates live at $DOTFILES_PUBLIC_DIR, else `chezmoi source-path`.
 # - --data KEY=VALUE flags are forwarded verbatim to copier.
 # - If a remote already exists, just convert SSH GitHub remotes to HTTPS.
 
@@ -50,7 +50,14 @@ done
 
 # copier.yml lives at the repo root so the source is git-tracked
 # (required for `copier update` to work in scaffolded projects).
-TEMPLATES_DIR="${DOTFILES_PUBLIC_DIR:-$HOME/Code/gh/dotfiles-jl-public}"
+if [[ -n "${DOTFILES_PUBLIC_DIR:-}" ]]; then
+  TEMPLATES_DIR="$DOTFILES_PUBLIC_DIR"
+elif command -v chezmoi &>/dev/null; then
+  TEMPLATES_DIR="$(chezmoi source-path)"
+else
+  echo "error: cannot locate templates. Set DOTFILES_PUBLIC_DIR or install chezmoi." >&2
+  exit 1
+fi
 
 if ! git rev-parse --is-inside-work-tree &>/dev/null; then
   git init
