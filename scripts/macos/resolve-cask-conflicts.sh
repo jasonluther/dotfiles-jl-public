@@ -40,7 +40,10 @@ while IFS= read -r cask; do
   [[ -z "$cask" ]] && continue
   brew list --cask "$cask" >/dev/null 2>&1 && continue
 
-  mapfile -t apps < <(cask_app_candidates "$cask")
+  apps=()
+  while IFS= read -r line; do
+    apps+=("$line")
+  done < <(cask_app_candidates "$cask")
 
   conflict=""
   for app in "${apps[@]:-}"; do

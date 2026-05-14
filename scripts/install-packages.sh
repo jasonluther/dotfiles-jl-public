@@ -112,7 +112,10 @@ if [[ "$os" == "darwin" ]]; then
   # collision; anything it can't adopt is printed on stdout so we can drop it
   # from the Brewfile we feed to `brew bundle` (which would otherwise abort).
   echo "==> resolving cask conflicts"
-  mapfile -t skip_casks < <("$SRC/scripts/macos/resolve-cask-conflicts.sh" "$SRC/Brewfile")
+  skip_casks=()
+  while IFS= read -r line; do
+    skip_casks+=("$line")
+  done < <("$SRC/scripts/macos/resolve-cask-conflicts.sh" "$SRC/Brewfile")
 
   # `brew bundle` exits non-zero when any entry fails. Capture output so we
   # can self-heal "Could not symlink" errors via `brew link --overwrite` and

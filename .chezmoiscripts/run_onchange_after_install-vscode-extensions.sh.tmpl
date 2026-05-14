@@ -12,10 +12,13 @@ MANIFEST="$SRC/packages/vscode-extensions.txt"
 [[ -f "$MANIFEST" ]] || exit 0
 
 # Read manifest, strip comments and blank lines.
-mapfile -t extensions < <(grep -vE '^[[:space:]]*(#|$)' "$MANIFEST" | awk '{$1=$1; print}')
+extensions=()
+while IFS= read -r line; do
+  extensions+=("$line")
+done < <(grep -vE '^[[:space:]]*(#|$)' "$MANIFEST" | awk '{$1=$1; print}')
 ((${#extensions[@]} > 0)) || exit 0
 
-declare -a installers=()
+installers=()
 command -v code        >/dev/null 2>&1 && installers+=("code")
 command -v code-server >/dev/null 2>&1 && installers+=("code-server")
 
@@ -24,7 +27,7 @@ if ((${#installers[@]} == 0)); then
   exit 0
 fi
 
-declare -A failed_ids=()
+failed_ids=()
 
 for installer in "${installers[@]}"; do
   # Cache currently-installed list once per installer to avoid 43x shell starts.
@@ -35,7 +38,10 @@ for installer in "${installers[@]}"; do
       continue
     fi
     if ! "$installer" --install-extension "$ext" --force >/dev/null 2>&1; then
-      failed_ids["$ext"]=1
+      case " ${failed_ids[*]:-} " in
+        *" $ext "*) ;;
+        *) failed_ids+=("$ext") ;;
+      esac
     fi
   done
 done
@@ -45,13 +51,13 @@ done
 # .vsix from Microsoft's marketplace and installing it locally.
 if ((${#failed_ids[@]} > 0)) && [[ -x "$SRC/scripts/install-vscode-vsix-fallback.sh" ]]; then
   echo "==> retrying ${#failed_ids[@]} extension(s) via vsix-fallback"
-  if "$SRC/scripts/install-vscode-vsix-fallback.sh" -- "${!failed_ids[@]}" >/dev/null 2>&1; then
+  if "$SRC/scripts/install-vscode-vsix-fallback.sh" -- "${failed_ids[@]}" >/dev/null 2>&1; then
     failed_ids=()
   fi
 fi
 
 if ((${#failed_ids[@]} > 0)); then
   printf '\033[1;31mvscode-extensions: failed to install:\033[0m\n' >&2
-  printf '  - %s\n' "${!failed_ids[@]}" >&2
+  printf '  - %s\n' "${failed_ids[@]}" >&2
   exit 1
 fi
