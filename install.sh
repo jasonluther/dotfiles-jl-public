@@ -132,6 +132,13 @@ chezmoi apply
 
 echo
 echo "✓ Dotfiles installed."
+cat <<'EOF'
+
+Open a new terminal — or run `exec zsh -l` in this one — so the new
+PATH (Homebrew, ~/.local/bin, etc.) is picked up. Newly installed
+tools like gh, gcloud, claude, code, etc. won't be found in this
+shell until that's done.
+EOF
 if ((is_linux)); then
   cat <<'EOF'
 
