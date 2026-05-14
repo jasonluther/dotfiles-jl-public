@@ -26,12 +26,12 @@ if ! command -v mas >/dev/null 2>&1; then
   exit 1
 fi
 
-declare -A skip_ids=()
+skip_ids=""
 if [[ -f "$unpurchased_file" ]]; then
   while IFS= read -r line; do
     line="${line%%#*}"
     line="${line//[[:space:]]/}"
-    [[ -n "$line" ]] && skip_ids["$line"]=1
+    [[ -n "$line" ]] && skip_ids+=" $line "
   done <"$unpurchased_file"
 fi
 
@@ -43,7 +43,7 @@ while IFS=' ' read -r id name; do
   if [[ -d "/Applications/${name}.app" || -d "${HOME}/Applications/${name}.app" ]]; then
     continue
   fi
-  if [[ -n "${skip_ids[$id]:-}" ]]; then
+  if [[ "$skip_ids" == *" $id "* ]]; then
     cached_skipped+=("$name ($id)")
     continue
   fi

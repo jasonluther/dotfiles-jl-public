@@ -61,7 +61,16 @@ if ((is_darwin)); then
     [[ -x "$candidate" ]] && brew_bin="$candidate" && break
   done
   if [[ -z "$brew_bin" ]] && ! command -v brew >/dev/null 2>&1; then
-    echo "==> Installing Homebrew (will prompt for sudo)..."
+    # NONINTERACTIVE=1 below tells brew's installer not to prompt — but it
+    # still needs sudo for /opt/homebrew chown. Prime the sudo timestamp
+    # here so the installer's silent `sudo` calls succeed.
+    echo "==> Homebrew install needs sudo. Enter your password if prompted."
+    if ! sudo -v; then
+      echo "error: sudo access is required to install Homebrew." >&2
+      echo "       The user '$(id -un)' must be an Administrator on this Mac." >&2
+      exit 1
+    fi
+    echo "==> Installing Homebrew..."
     NONINTERACTIVE=1 /bin/bash -c \
       "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
