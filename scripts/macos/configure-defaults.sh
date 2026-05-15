@@ -57,10 +57,14 @@ killall Dock || true
 if ! defaults write com.apple.Safari AutoFillPasswords -bool false 2>/dev/null; then
   echo "warn: couldn't disable Safari AutoFillPasswords — grant Full Disk Access to your terminal and re-run." >&2
 fi
-# Chrome: disable the built-in password manager. A cloud-managed profile
-# (e.g. enterprise Google account) may override this via policy; in that
-# case the setting needs to be changed on the policy side.
-defaults write com.google.Chrome PasswordManagerEnabled -bool false
+# Chrome: disable the built-in password manager. Chrome's PolicyLoaderMac
+# reads policies via MCX/Managed Preferences, NOT from the per-user
+# defaults domain — so a plain `defaults write com.google.Chrome ...`
+# is silently ignored. Write to the system-wide plist with sudo instead;
+# CFPreferences then surfaces it as a policy. A cloud-managed Google
+# account can still override; in that case the setting needs to be
+# changed on the policy side.
+sudo defaults write /Library/Preferences/com.google.Chrome PasswordManagerEnabled -bool false
 
 # Expand save panel by default
 defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode -bool true
