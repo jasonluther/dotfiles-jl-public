@@ -10,6 +10,37 @@ defaults write com.apple.dock show-recents -bool false
 # Dock: don't rearrange spaces, group Mission Control by app
 defaults write com.apple.dock mru-spaces -bool false
 defaults write com.apple.dock expose-group-apps -bool true
+
+# Dock: pin exactly these apps, in this order. Apps not yet installed
+# (e.g. Slack on a fresh bootstrap before mas-apps runs) are skipped with
+# a warning — rerun this script after the missing app installs to backfill.
+pinned_apps=(
+  "/Applications/Safari.app"
+  "/System/Applications/Utilities/Terminal.app"
+  "/Applications/Slack.app"
+  "/System/Applications/Calendar.app"
+  "/System/Applications/Reminders.app"
+  "/Applications/Google Chrome.app"
+  "/System/Applications/Messages.app"
+)
+dock_tile() {
+  printf '<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>file://%s/</string><key>_CFURLStringType</key><integer>15</integer></dict></dict></dict>' "$1"
+}
+tiles=()
+missing=()
+for app in "${pinned_apps[@]}"; do
+  if [[ -d "$app" ]]; then
+    tiles+=("$(dock_tile "$app")")
+  else
+    missing+=("$app")
+  fi
+done
+if ((${#missing[@]} > 0)); then
+  printf 'dock pin: skipping (not installed): %s\n' "${missing[@]}" >&2
+fi
+defaults write com.apple.dock persistent-apps -array "${tiles[@]}"
+defaults write com.apple.dock persistent-others -array
+
 killall Dock || true
 
 # Expand save panel by default
