@@ -30,7 +30,12 @@ tiles=()
 missing=()
 for app in "${pinned_apps[@]}"; do
   if [[ -d "$app" ]]; then
-    tiles+=("$(dock_tile "$app")")
+    # Resolve symlinks so Safari (which lives in /System/Cryptexes/...
+    # with a symlink at /Applications/Safari.app) doesn't render with
+    # the Dock's "alias" badge. Other apps are not symlinks; pwd -P is
+    # a no-op for them.
+    real_app="$(cd "$app" && pwd -P)"
+    tiles+=("$(dock_tile "$real_app")")
   else
     missing+=("$app")
   fi
