@@ -139,6 +139,18 @@ PATH (Homebrew, ~/.local/bin, etc.) is picked up. Newly installed
 tools like gh, gcloud, claude, code, etc. won't be found in this
 shell until that's done.
 EOF
+if ((is_darwin)); then
+  cat <<'EOF'
+
+Next steps on macOS:
+
+  After signing in to the 1Password app, open Settings > Developer and
+  enable "Use the SSH agent" and "Integrate with 1Password CLI". These
+  toggles are HMAC-signed in 1Password's settings.json and can't be
+  flipped from a script. dot_zshrc already wires SSH_AUTH_SOCK to the
+  agent socket — it activates the moment those toggles are on.
+EOF
+fi
 if ((is_linux)); then
   cat <<'EOF'
 
