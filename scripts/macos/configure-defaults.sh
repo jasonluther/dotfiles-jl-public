@@ -48,6 +48,20 @@ defaults write com.apple.dock persistent-others -array
 
 killall Dock || true
 
+# Defer password autofill to the 1Password browser extensions.
+# Safari's preference file lives inside its TCC-protected container; the
+# write succeeds only if the terminal running this script has Full Disk
+# Access (System Settings > Privacy & Security > Full Disk Access). Soft-
+# fail so the rest of the script still runs on a fresh Mac; the user can
+# grant FDA and re-run.
+if ! defaults write com.apple.Safari AutoFillPasswords -bool false 2>/dev/null; then
+  echo "warn: couldn't disable Safari AutoFillPasswords — grant Full Disk Access to your terminal and re-run." >&2
+fi
+# Chrome: disable the built-in password manager. A cloud-managed profile
+# (e.g. enterprise Google account) may override this via policy; in that
+# case the setting needs to be changed on the policy side.
+defaults write com.google.Chrome PasswordManagerEnabled -bool false
+
 # Expand save panel by default
 defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode -bool true
 defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode2 -bool true
