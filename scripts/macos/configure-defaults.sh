@@ -44,7 +44,17 @@ if ((${#missing[@]} > 0)); then
   printf 'dock pin: skipping (not installed): %s\n' "${missing[@]}" >&2
 fi
 defaults write com.apple.dock persistent-apps -array "${tiles[@]}"
-defaults write com.apple.dock persistent-others -array
+
+# Dock: keep Downloads on the right side as a stack sorted by Date Added so
+# the most-recently-downloaded file is on top. arrangement=2 (Date Added),
+# displayas=0 (Stack), showas=0 (Automatic — fan when small, grid when large).
+downloads_tile='<dict><key>tile-data</key><dict><key>arrangement</key><integer>2</integer><key>displayas</key><integer>0</integer><key>file-data</key><dict><key>_CFURLString</key><string>file://'"${HOME}"'/Downloads/</string><key>_CFURLStringType</key><integer>15</integer></dict><key>file-type</key><integer>2</integer><key>showas</key><integer>0</integer></dict><key>tile-type</key><string>directory-tile</string></dict>'
+defaults write com.apple.dock persistent-others -array "$downloads_tile"
+
+# Hot corners: bottom-left disables the screen saver (corner code 6, no
+# modifier). Other corners stay at their defaults.
+defaults write com.apple.dock wvous-bl-corner -int 6
+defaults write com.apple.dock wvous-bl-modifier -int 0
 
 killall Dock || true
 

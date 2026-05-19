@@ -23,6 +23,7 @@ nmap
 node
 pandoc
 pipx
+pre-commit
 prettier
 ripgrep
 shfmt
