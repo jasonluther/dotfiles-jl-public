@@ -51,10 +51,13 @@ defaults write com.apple.dock persistent-apps -array "${tiles[@]}"
 downloads_tile='<dict><key>tile-data</key><dict><key>arrangement</key><integer>2</integer><key>displayas</key><integer>0</integer><key>file-data</key><dict><key>_CFURLString</key><string>file://'"${HOME}"'/Downloads/</string><key>_CFURLStringType</key><integer>15</integer></dict><key>file-type</key><integer>2</integer><key>showas</key><integer>0</integer></dict><key>tile-type</key><string>directory-tile</string></dict>'
 defaults write com.apple.dock persistent-others -array "$downloads_tile"
 
-# Hot corners: bottom-left disables the screen saver (corner code 6, no
-# modifier). Other corners stay at their defaults.
-defaults write com.apple.dock wvous-bl-corner -int 6
-defaults write com.apple.dock wvous-bl-modifier -int 0
+# Hot corners: disable all four. macOS Tahoe defaults Quick Note into the
+# bottom-right corner, so leaving these unset is not a clean slate — they
+# must be explicitly written to 1 (no action).
+for corner in tl tr bl br; do
+  defaults write com.apple.dock "wvous-${corner}-corner" -int 1
+  defaults write com.apple.dock "wvous-${corner}-modifier" -int 0
+done
 
 killall Dock || true
 
