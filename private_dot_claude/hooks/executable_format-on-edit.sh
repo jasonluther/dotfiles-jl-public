@@ -42,15 +42,23 @@ def find_pyproject(path: Path) -> Path | None:
 
 
 def format_python(path: str) -> None:
-    """ruff format + ruff check --fix. Fall back to `uv run ruff` for projects."""
+    """ruff format + ruff check --fix. Fall back to `uv run ruff` for projects.
+
+    ``--unfixable F401`` keeps the hook from deleting unused imports mid-edit
+    (e.g. an import added a step before its first use). They are still reported
+    and enforced by the full ``ruff check`` at commit time.
+    """
     if ruff := which("ruff"):
         run([ruff, "format", path])
-        run([ruff, "check", "--fix", path])
+        run([ruff, "check", "--fix", "--unfixable", "F401", path])
         return
     project = find_pyproject(Path(path).resolve())
     if project and which("uv"):
         run(["uv", "run", "--project", str(project), "ruff", "format", path])
-        run(["uv", "run", "--project", str(project), "ruff", "check", "--fix", path])
+        run(
+            ["uv", "run", "--project", str(project), "ruff", "check", "--fix",
+             "--unfixable", "F401", path]
+        )
 
 
 def format_markdown(path: str) -> None:
