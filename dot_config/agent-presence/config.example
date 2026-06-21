@@ -1,9 +1,0 @@
-# Agent Presence Board — per-machine config
-# Copy this file to ~/.config/agent-presence/config and fill in PRESENCE_TOKEN.
-# This file (config) is NOT committed — it holds a secret bearer token.
-
-# Bearer token for the presence server (required; without it the hooks are no-ops).
-PRESENCE_TOKEN=your-token-here
-
-# URL of the presence server (optional; defaults to the deployed Railway instance).
-# PRESENCE_URL=https://agent-presence-production.up.railway.app
