@@ -56,8 +56,18 @@ def format_python(path: str) -> None:
     if project and which("uv"):
         run(["uv", "run", "--project", str(project), "ruff", "format", path])
         run(
-            ["uv", "run", "--project", str(project), "ruff", "check", "--fix",
-             "--unfixable", "F401", path]
+            [
+                "uv",
+                "run",
+                "--project",
+                str(project),
+                "ruff",
+                "check",
+                "--fix",
+                "--unfixable",
+                "F401",
+                path,
+            ]
         )
 
 
