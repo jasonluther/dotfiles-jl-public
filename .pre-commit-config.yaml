@@ -23,7 +23,7 @@ repos:
       - id: check-yaml
         exclude: '\.tmpl$|\.jinja$'
       - id: check-json
-        exclude: '\.tmpl$|\.jinja$'
+        exclude: '\.tmpl$|\.jinja$|^\.chezmoitemplates/'
       - id: check-toml
         exclude: '\.tmpl$|\.jinja$'
       - id: check-merge-conflict
