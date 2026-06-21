@@ -22,21 +22,6 @@ branch.
 
 ## Steps
 
-### 0. Consult the presence board
-
-Before rebasing or arming auto-merge, check whether another agent session is active on
-this repo (possibly on another machine) — concurrent rebases/merges on the same repo race
-each other, and an auto-merge armed here can land on top of work someone else is mid-flight.
-
-```bash
-~/.local/bin/presence list    # active sessions on the current repo
-```
-
-This is **advisory, not blocking**: the client exits 0 (and the board may be unconfigured
-or down, printing nothing). If it lists other active sessions on this repo, surface them to
-the user and ask whether to proceed before continuing — especially if a listed session names
-a task that overlaps this PR. With no other sessions (or no board), continue normally.
-
 ### 1. Identify the PR, default branch, and allowed merge strategy
 
 ```bash

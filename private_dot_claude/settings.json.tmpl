@@ -113,30 +113,6 @@
           }
         ]
       }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/presence.py register",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/presence.py deregister",
-            "timeout": 5
-          }
-        ]
-      }
     ]
   },
   "enabledPlugins": {
