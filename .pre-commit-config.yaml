@@ -30,7 +30,7 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/trufflesecurity/trufflehog
-    rev: v3.95.2
+    rev: v3.95.6
     hooks:
       - id: trufflehog
         entry: trufflehog git file://. --max-depth=1 --results=verified,unverified --fail
