@@ -9,6 +9,11 @@ synchronously), this is the **arm-and-walk-away** path: GitHub merges the PR its
 required checks pass. Ideal when review checks are slow (e.g. an LLM review takes minutes),
 when you have a queue of PRs, or for overnight/unattended runs.
 
+**See also:** if the task isn't done until the PR is _merged_, use `/watch-to-merge`
+instead — it arms then polls to `state == MERGED`, recovering stalls (`BEHIND` → re-arm,
+slow review, `BLOCKED`). `/pr merge` does a synchronous merge of an already-green PR. For
+a Markdown-only PR, `/open-docs-pr` hits the fast docs CI path.
+
 ## Arguments
 
 `$ARGUMENTS` is optional: a PR number to act on. If omitted, act on the PR for the current

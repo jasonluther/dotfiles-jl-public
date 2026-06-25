@@ -87,10 +87,13 @@ gh pr view --json number,url,state 2>/dev/null
 - If the PR state is `MERGED` or `CLOSED`, the branch name is stale. Create a **new
   branch** before pushing (e.g., append `-v2` or use a descriptive name), so you don't
   push commits to a merged PR's branch:
+
   ```bash
   git checkout -b <new-branch-name>
   ```
+
 - If the PR state is `OPEN` or no PR exists, push to the current branch:
+
   ```bash
   git push --force-with-lease origin HEAD
   ```
@@ -136,13 +139,17 @@ listing workflows with `gh workflow list` and picking the one that isn't a revie
   workflow — it'll be stale after the fix anyway.
 - If CI **passes**: report success, then watch the review workflow in the background.
   Find its run and watch it:
+
   ```bash
   gh run list --branch <branch> --workflow claude-code-review.yml --limit 1 --json databaseId --jq '.[0].databaseId'
   ```
+
   Then in a background task (`run_in_background: true`):
+
   ```bash
   gh run watch <run-id>; gh pr view --comments
   ```
+
   When it completes, report any review comments to the user. If there are actionable
   comments, summarize them.
 
@@ -169,11 +176,17 @@ gh pr view --json number,url,state,mergeable,statusCheckRollup
 
 ### M2. Merge the PR
 
+If all required checks are already green, merge directly:
+
 ```bash
 gh pr merge --rebase --delete-branch
 ```
 
-If merge fails (e.g., branch protection), show the error and stop.
+If merge fails because a required check is still pending/blocked (e.g. a slow LLM
+`claude-review`, or the PR fell `BEHIND` another merge), **do not give up** — hand off to
+`/watch-to-merge`, which arms auto-merge and polls to `state == MERGED`, recovering
+`BEHIND` (rebase + re-arm), waiting out the slow review, and treating a `SKIPPED` required
+check as pass. Only a genuine `DIRTY` conflict or check `FAILURE` should stop the flow.
 
 ### M2.5. Return to main
 
@@ -218,17 +231,21 @@ If there are no other open PRs, skip this step and report that the queue is empt
 If a PR is found:
 
 1. Fetch and rebase its branch onto the updated main:
+
    ```bash
    git fetch origin main <branch>
    git checkout <branch>
    git rebase origin/main
    ```
+
 2. If there are conflicts, **stop and show them** — do not auto-resolve. Tell the user
    which PR has conflicts and on which files.
 3. Force-push the rebased branch:
+
    ```bash
    git push --force-with-lease origin <branch>
    ```
+
 4. Switch back to the original branch (or main if the worktree was cleaned up).
 5. Report: "Rebased PR #N (`<branch>`) onto main and force-pushed. CI will run on the
    updated branch."

@@ -27,3 +27,6 @@ Notes:
   cares about (passive voice, weasel words, jargon).
 - For markdownlint, prefer disabling a rule project-wide over scattering inline
   `<!-- markdownlint-disable -->` comments.
+- **Spelling is owned by `/spellcheck`.** Don't manage the Vale accept-list here — for
+  spelling findings (or to triage typos vs. legitimate terms), defer to `/spellcheck`,
+  which owns the dictionary workflow. Fix only non-spelling Vale issues in this command.
