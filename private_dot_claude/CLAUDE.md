@@ -16,6 +16,11 @@ precedence over anything here.
 - Use `/rebase-arm-automerge` to land a PR hands-off and `/branch-prune` to clean up
   merged remote branches (both are rebase-safe). Prefer enabling repo `delete_branch_on_merge`
   so the pileup doesn't recur.
+- **Auto-merge armed ≠ merged.** Armed auto-merge stalls silently — a slow required check
+  never posting, the PR falling behind another merge, or a blocked/dirty state. Don't call
+  a task done at "auto-merge armed": watch the PR through to `state == MERGED` (use
+  `/watch-to-merge`, which polls and recovers those stalls). Only a merge commit in the
+  base branch's log proves the work shipped.
 
 ## Working safely
 
@@ -28,6 +33,13 @@ precedence over anything here.
   carry to the next.
 - Don't trust a summary (mine or a doc's) over the code. When reconciling docs or removing a
   TODO, verify the claim in the actual source/git first.
+- **Read the actual failure output — don't infer cause from a check's name or red/green.**
+  Diagnose from the log, not the title (a fast-failing CI shard is usually a lint/format
+  slip, not a flaky test). Green tests prove behavior works, not that the change is at the
+  right layer — review the diff against the project's architecture and simplicity goals too.
+- **Behavior/UI changes need real-app verification.** Passing tests don't prove a button
+  works. For changes to user-facing flow, run the app and exercise the actual path before
+  claiming done.
 
 ## Cross-platform
 
