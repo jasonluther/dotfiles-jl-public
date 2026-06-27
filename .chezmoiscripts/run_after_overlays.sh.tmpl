@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Thin wrapper for scripts/sync/sync-overlays.sh.
+#
+# run_after_ (not run_onchange_) so it fires on every `chezmoi apply` and
+# therefore every `chezmoi update` — pulling and applying overlay clones on top
+# of the just-applied public source. "after" (not "before") so overlays layer
+# over freshly-applied public files (e.g. modify_ scripts that edit them).
+
+exec {{ joinPath .chezmoi.sourceDir "scripts/sync/sync-overlays.sh" | quote }}
