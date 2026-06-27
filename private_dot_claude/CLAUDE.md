@@ -46,3 +46,8 @@ precedence over anything here.
 - This config is shared between macOS and Linux. Use `open` on macOS, `xdg-open` on Linux
   (check `uname`). Note `zsh` does not word-split unquoted variables — use `xargs` or
   `${=var}` when you need splitting.
+
+<!-- Machine-local memory overlay: created empty by default; private overlays may
+     fill it with host- or tool-specific guidance. Safe to leave empty. -->
+
+@~/.claude/CLAUDE.local.md
