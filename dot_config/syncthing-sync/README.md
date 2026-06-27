@@ -36,11 +36,19 @@ a public dotfiles repo.
 
 ## Apply
 
+`chezmoi apply` runs the apply script automatically via
+`.chezmoiscripts/run_onchange_after_syncthing-apply.sh.tmpl`, which reruns
+whenever any versioned file above changes. It skips silently on hosts where
+Syncthing isn't running (gated on the `/rest/noauth/health` endpoint), so a
+server that syncs nothing is unaffected. So in normal use, editing a versioned
+file + applying dotfiles is enough — no separate step.
+
+To run it by hand (e.g. to preview, or outside a chezmoi apply):
+
 ```sh
 scripts/syncthing-apply.sh           # apply
 scripts/syncthing-apply.sh --dry-run # preview
 ```
 
 The script reads the API key from the local Syncthing config; it never reads
-or writes anything host-specific to this repo. Run it on each host after
-editing the versioned files.
+or writes anything host-specific to this repo.
