@@ -34,6 +34,9 @@ __pycache__
 .next
 .turbo
 .cache
+.pytest_cache
+.ruff_cache
+.mypy_cache
 
 // VCS junk
 //
@@ -42,11 +45,28 @@ __pycache__
 // noise and (worse) stranded loose objects.
 //
 // Fully synced: refs, packed objects, completed loose objects, config.
-// Excluded:    lock files, atomic-rename temp files, OS metadata.
+// Excluded:    the machine-local index, reflogs, in-flight scratch, lock
+//              files, atomic-rename temp files, OS metadata.
+//
+// .git/index is a per-machine cache of working-tree stat data (inode/mtime/
+// size). It is rewritten by almost every git command and is meaningless on
+// another host, so syncing it only produces conflicts; git rebuilds it
+// locally on the next command after refs/objects arrive.
+//
+// Reflogs (.git/logs) and the scratch files (FETCH_HEAD/ORIG_HEAD/
+// COMMIT_EDITMSG/MERGE_*) are per-operation churn, not needed for branches
+// or objects to flow between machines.
 //
 // This does NOT prevent legitimate conflicts when both machines write the
 // same ref (e.g. both committing on `main` independently). For that you
 // need single-writer discipline; see resolve-git-sync-conflicts for repair.
+.git/index
+.git/logs
+.git/FETCH_HEAD
+.git/ORIG_HEAD
+.git/COMMIT_EDITMSG
+.git/MERGE_HEAD
+.git/MERGE_MSG
 .git/*.lock
 .git/**/*.lock
 .git/objects/*/tmp_*
