@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Thin wrapper for scripts/syncthing-apply.sh. Reruns when any managed
+# Syncthing config changes, so other hosts pick up new ignore patterns
+# (and options/gui/folder defaults) on `chezmoi apply` — no manual step.
+#
+# Skips silently when Syncthing isn't running locally (e.g. a server that
+# syncs nothing), so apply on those hosts isn't affected. Warns-and-continues
+# on a non-zero apply rather than failing the whole `chezmoi apply`.
+#
+# Rerun triggers — hashes of every file the apply script reads:
+#   stignore-shared:      {{ include "dot_config/syncthing-sync/stignore-shared" | sha256sum }}
+#   options.json:         {{ include "dot_config/syncthing-sync/options.json" | sha256sum }}
+#   gui.json:             {{ include "dot_config/syncthing-sync/gui.json" | sha256sum }}
+#   defaults-folder.json: {{ include "dot_config/syncthing-sync/defaults-folder.json" | sha256sum }}
+#   apply script:         {{ include "scripts/syncthing-apply.sh" | sha256sum }}
+
+set -uo pipefail
+
+SRC={{ .chezmoi.sourceDir | quote }}
+ST_URL="${SYNCTHING_URL:-http://localhost:8384}"
+
+command -v curl >/dev/null 2>&1 || exit 0
+
+# Only act on hosts with a live local Syncthing; the noauth health endpoint
+# needs no API key. Skip silently otherwise (no Syncthing -> nothing to do).
+curl -fsS -o /dev/null --max-time 3 "$ST_URL/rest/noauth/health" 2>/dev/null || exit 0
+
+if ! "$SRC/scripts/syncthing-apply.sh"; then
+  echo "warning: syncthing-apply.sh exited non-zero; continuing chezmoi apply." >&2
+fi
