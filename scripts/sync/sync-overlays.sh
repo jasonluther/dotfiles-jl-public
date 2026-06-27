@@ -13,6 +13,12 @@
 # run_after script executes. Per-overlay state files sidestep the lock and keep
 # each overlay's run_onchange bookkeeping isolated.
 #
+# --force on the overlay apply: a fresh per-overlay state DB has no record of
+# the shared private dirs (~/.claude, ~/.local, ~/.ssh) that the public source
+# also manages, so without --force chezmoi would prompt ("has changed since
+# chezmoi last wrote it") on them and abort under a non-interactive apply. The
+# overlay owns the files it writes, so forcing them is safe.
+#
 # Fail-safe: a stuck pull or a failing overlay apply warns but never aborts the
 # public apply.
 set -uo pipefail
@@ -41,7 +47,7 @@ for overlay in "${overlays[@]}"; do
 
   if ! chezmoi --source "$overlay" \
     --persistent-state "$state_dir/chezmoistate-$flavor.boltdb" \
-    apply; then
+    apply --force; then
     echo "warning: overlay $flavor: chezmoi apply failed" >&2
   fi
 done
