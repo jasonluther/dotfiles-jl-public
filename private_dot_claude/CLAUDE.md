@@ -40,6 +40,11 @@ precedence over anything here.
 - **Behavior/UI changes need real-app verification.** Passing tests don't prove a button
   works. For changes to user-facing flow, run the app and exercise the actual path before
   claiming done.
+- **A passing `curl`/`fetch` is not a passing browser navigation.** For CDN/edge or
+  SPA-fallback routing (e.g. Cloudflare Static Assets `not_found_handling`, service
+  workers, redirect interstitials), a non-navigation request can take a different code
+  path than a real browser navigation — so a green status code proves nothing about what a
+  user actually sees. Drive an actual browser navigation, not just a status check.
 
 ## Cross-platform
 
