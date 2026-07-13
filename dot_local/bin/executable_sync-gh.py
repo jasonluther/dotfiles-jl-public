@@ -10,6 +10,7 @@ detached-HEAD, and mid-rebase/merge/cherry-pick repos are skipped.
 
 import argparse
 import json
+import os
 import re
 import shutil
 import socket
@@ -36,24 +37,81 @@ ARCHIVED_DIR = GH_DIR / "archived"
 PUBLIC_DIR = GH_DIR / "public"
 ARCHIVED_PUBLIC_DIR = ARCHIVED_DIR / "public"
 
+# Where to look for an explicit org list, in precedence order:
+#   1. $SYNC_GH_ORGS env var
+#   2. $XDG_CONFIG_HOME/sync-gh/orgs (default ~/.config/sync-gh/orgs)
+#   3. fallback: every org the authenticated user belongs to
+# In (1) and (2), orgs are comma/whitespace/newline separated and '#' starts a
+# comment. An explicitly set but empty value means "personal repos only".
+ENV_ORGS = "SYNC_GH_ORGS"
 
-def get_repos():
-    """Get all repos for the authenticated user via gh CLI."""
+
+def _config_path():
+    base = os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")
+    return Path(base) / "sync-gh" / "orgs"
+
+
+def _parse_org_list(text):
+    """Parse org logins: comma/whitespace-separated, '#' comments ignored."""
+    orgs = []
+    for line in text.splitlines():
+        for tok in line.split("#", 1)[0].replace(",", " ").split():
+            orgs.append(tok)
+    return orgs
+
+
+def get_orgs():
+    """Resolve which orgs to sync alongside the user's personal repos.
+
+    `gh repo list` with no owner only returns personal repos, so orgs are
+    fetched separately. Precedence: SYNC_GH_ORGS env var, then
+    ~/.config/sync-gh/orgs, then every org the user belongs to. An explicitly
+    set-but-empty env var or config file means "personal repos only".
+    """
+    env = os.environ.get(ENV_ORGS)
+    if env is not None:
+        return _parse_org_list(env)
+    cfg = _config_path()
+    if cfg.is_file():
+        return _parse_org_list(cfg.read_text())
     result = subprocess.run(
-        [
-            "gh",
-            "repo",
-            "list",
-            "--limit",
-            "500",
-            "--json",
-            "name,url,isArchived,isPrivate",
-        ],
+        ["gh", "api", "user/orgs", "-q", ".[].login"],
         capture_output=True,
         text=True,
         check=True,
     )
+    return result.stdout.split()
+
+
+def _list_repos(owner=None):
+    """List repos for `owner` (or the authenticated user if None) via gh CLI."""
+    cmd = ["gh", "repo", "list"]
+    if owner:
+        cmd.append(owner)
+    cmd += [
+        "--limit",
+        "500",
+        "--json",
+        "name,nameWithOwner,url,isArchived,isPrivate",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     return json.loads(result.stdout)
+
+
+def get_repos():
+    """Get repos for the authenticated user plus the configured orgs.
+
+    Deduplicated by nameWithOwner in case membership causes overlap.
+    """
+    repos = []
+    seen = set()
+    for owner in (None, *get_orgs()):
+        for repo in _list_repos(owner):
+            key = repo["nameWithOwner"]
+            if key not in seen:
+                seen.add(key)
+                repos.append(repo)
+    return repos
 
 
 def clone_repo(name, url, dest):
