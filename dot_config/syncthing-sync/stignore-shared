@@ -44,9 +44,10 @@ __pycache__
 // machines, while suppressing the in-flight files that cause sync-conflict
 // noise and (worse) stranded loose objects.
 //
-// Fully synced: refs, packed objects, completed loose objects, config.
+// Fully synced: refs, packed objects, completed loose objects.
 // Excluded:    the machine-local index, reflogs, in-flight scratch, lock
-//              files, atomic-rename temp files, OS metadata.
+//              files, atomic-rename temp files, hooks, config, info/exclude,
+//              OS metadata.
 //
 // .git/index is a per-machine cache of working-tree stat data (inode/mtime/
 // size). It is rewritten by almost every git command and is meaningless on
@@ -60,8 +61,19 @@ __pycache__
 // This does NOT prevent legitimate conflicts when both machines write the
 // same ref (e.g. both committing on `main` independently). For that you
 // need single-writer discipline; see resolve-git-sync-conflicts for repair.
+//
+// hooks/, config, and info/exclude are machine-local, not history: git's
+// default hooks/*.sample are byte-identical everywhere (pure conflict noise),
+// installed hooks belong to the local checkout, config carries per-host remote
+// and core.* settings, and info/exclude is a per-machine ignore list. None
+// need to flow between machines (a fresh checkout gets them from `git clone`),
+// and syncing them only manufactures conflicts. On 2026-07-07 these produced
+// the bulk of a 500-file sync-conflict pileup.
 .git/index
 .git/logs
+.git/hooks
+.git/config
+.git/info/exclude
 .git/FETCH_HEAD
 .git/ORIG_HEAD
 .git/COMMIT_EDITMSG
