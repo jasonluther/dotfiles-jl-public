@@ -9,6 +9,8 @@
 #
 # Rerun triggers — hashes of every file the apply script reads:
 #   stignore-shared:      {{ include "dot_config/syncthing-sync/stignore-shared" | sha256sum }}
+#   folders-remove:       {{ include "dot_config/syncthing-sync/folders-remove" | sha256sum }}
+#   folders-ensure.json:  {{ include "dot_config/syncthing-sync/folders-ensure.json" | sha256sum }}
 #   options.json:         {{ include "dot_config/syncthing-sync/options.json" | sha256sum }}
 #   gui.json:             {{ include "dot_config/syncthing-sync/gui.json" | sha256sum }}
 #   defaults-folder.json: {{ include "dot_config/syncthing-sync/defaults-folder.json" | sha256sum }}

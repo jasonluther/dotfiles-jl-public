@@ -13,6 +13,10 @@ docs/
 templates/
 tests/
 
+# Python bytecode caches (e.g. left by running tests from the source tree).
+**/__pycache__
+**/*.pyc
+
 # macOS-only .chezmoiscripts/* gate themselves inside the template with
 # an `eq .chezmoi.os "darwin"` check — chezmoiignore does not apply to
 # .chezmoiscripts.
