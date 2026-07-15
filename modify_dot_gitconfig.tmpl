@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Merge the managed gitconfig into the machine's existing ~/.gitconfig.
+# chezmoi (modify_ script) pipes the current file in on stdin and uses our
+# stdout as the new contents.
+#
+# Policy: managed WINS for every key it defines (identity, push/pull, credential
+# helpers, includes) — so git policy stays authoritative under the daily
+# `chezmoi apply --force`. Keys the template does NOT define — e.g.
+# safe.directory entries, user.signingkey, a locally-set credential.helper,
+# maintenance.* — are preserved from the existing file. Multi-valued keys are
+# handled. A fresh machine (empty stdin) just gets the managed config.
+set -euo pipefail
+
+local=$(mktemp)
+managed=$(mktemp)
+trap 'rm -f "$local" "$managed"' EXIT
+
+cat >"$local"
+cat >"$managed" <<'MANAGED_GITCONFIG_EOF'
+[user]
+	name = {{ .name | quote }}
+	email = {{ .email | quote }}
+[init]
+	defaultBranch = main
+[push]
+	autoSetupRemote = true
+[fetch]
+	prune = true
+[diff]
+	colorMoved = default
+[merge]
+	conflictstyle = zdiff3
+[rerere]
+	enabled = true
+[pull]
+	rebase = true
+	ff = only
+[rebase]
+	autoStash = true
+	updateRefs = true
+[credential "https://github.com"]
+	helper =
+	helper = !{{ lookPath "gh" }} auth git-credential
+[credential "https://gist.github.com"]
+	helper =
+	helper = !{{ lookPath "gh" }} auth git-credential
+[url "https://github.com/"]
+	insteadOf = git@github.com:
+[include]
+	path = ~/.config/git/aliases
+	path = ~/.config/git/delta
+MANAGED_GITCONFIG_EOF
+
+# Append keys present in the existing file but NOT defined by the managed
+# config, preserving their (possibly multi-) values. Keys managed defines are
+# left as managed wrote them.
+comm -13 \
+  <(git config -f "$managed" --list --name-only 2>/dev/null | sort -u || true) \
+  <(git config -f "$local" --list --name-only 2>/dev/null | sort -u || true) |
+  while IFS= read -r key; do
+    [ -n "$key" ] || continue
+    git config -f "$local" --get-all "$key" | while IFS= read -r val; do
+      git config -f "$managed" --add "$key" "$val"
+    done
+  done
+
+cat "$managed"
