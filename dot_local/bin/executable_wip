@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""wip — pick up work-in-progress snapshots from your other machines.
+
+Companion to `sync-gh.py --wip-only`, which continuously snapshots each repo's
+working tree to a `wip/<host>` branch (private GitHub repos) or a git bundle in
+~/.local/share/wip-bundles (public / local-only / ~/Projects repos). Run inside
+a repo:
+
+    wip                list snapshots from OTHER hosts (age, diffstat)
+    wip diff  <host>   show the full diff a host's snapshot would apply
+    wip apply <host>   overlay that host's working-tree changes onto yours
+
+`apply` never silently clobbers: it refuses on a dirty working tree unless
+--force, and even then applies via `git apply --3way`, which leaves conflict
+markers rather than overwriting. Your own WIP is separately snapshotted by the
+wip loop, so nothing is ever lost.
+"""
+
+import argparse
+import os
+import re
+import socket
+import subprocess
+import sys
+from pathlib import Path
+
+WIP_BUNDLE_DIR = Path.home() / ".local" / "share" / "wip-bundles"
+_BRANCH_SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
+_KEY_SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
+
+
+def sanitized_hostname():
+    """Hostname as a git-ref-safe token — must match sync-gh.py."""
+    raw = socket.gethostname().split(".")[0]
+    return _BRANCH_SAFE.sub("-", raw).strip("-.") or "unknown-host"
+
+
+def bundle_key(dest):
+    """Collision-free bundle basename for a repo — must match sync-gh.py."""
+    dest = Path(dest).resolve()
+    try:
+        rel = dest.relative_to(Path.home().resolve())
+    except ValueError:
+        rel = Path(*dest.parts[1:])
+    return _KEY_SAFE.sub("-", str(rel)).strip("-") or "repo"
+
+
+def git(args, check=False, **kw):
+    return subprocess.run(
+        ["git", *args], capture_output=True, text=True, check=check, **kw
+    )
+
+
+def repo_root():
+    r = git(["rev-parse", "--show-toplevel"])
+    if r.returncode != 0:
+        sys.exit("wip: not inside a git repository")
+    return Path(r.stdout.strip())
+
+
+def has_origin():
+    return git(["remote", "get-url", "origin"]).returncode == 0
+
+
+def gather_snapshots(this_host):
+    """Return {host: rev} for every OTHER host with a snapshot for this repo.
+
+    Fetches on demand so the listing is always fresh: wip/* branches from
+    origin (private GitHub repos) and refs/wip/<host> from each per-host bundle
+    (bundled repos). Bundle refs win if a host appears in both.
+    """
+    snaps = {}
+    if has_origin():
+        git(["fetch", "-q", "origin", "+refs/heads/wip/*:refs/remotes/origin/wip/*"])
+        out = git(
+            [
+                "for-each-ref",
+                "--format=%(refname:strip=4) %(objectname)",
+                "refs/remotes/origin/wip",
+            ]
+        ).stdout
+        for line in out.splitlines():
+            host, _, sha = line.partition(" ")
+            if host and host != this_host:
+                snaps[host] = sha
+
+    key = bundle_key(repo_root())
+    if WIP_BUNDLE_DIR.is_dir():
+        for bundle in sorted(WIP_BUNDLE_DIR.glob(f"{key}@*.bundle")):
+            host = bundle.name[len(key) + 1 : -len(".bundle")]
+            if not host or host == this_host:
+                continue
+            # Import the bundle's wip ref into a local inspect ref.
+            fetched = git(
+                ["fetch", "-q", str(bundle), f"+refs/wip/{host}:refs/wip-remote/{host}"]
+            )
+            if fetched.returncode == 0:
+                snaps[host] = f"refs/wip-remote/{host}"
+    return snaps
+
+
+def age_of(rev):
+    r = git(["log", "-1", "--format=%cr", rev])
+    return r.stdout.strip() if r.returncode == 0 else "?"
+
+
+def cmd_list(this_host):
+    snaps = gather_snapshots(this_host)
+    if not snaps:
+        print("No WIP snapshots from other hosts for this repo.")
+        return 0
+    print(f"WIP snapshots for '{repo_root().name}' (vs your HEAD):\n")
+    for host, rev in sorted(snaps.items()):
+        stat = git(["diff", "--shortstat", "HEAD", rev]).stdout.strip()
+        stat = stat or "no diff vs your HEAD"
+        print(f"  {host:<16} {age_of(rev):<16} {stat}")
+    print("\nInspect: wip diff <host>   Apply: wip apply <host>")
+    return 0
+
+
+def resolve_host(this_host, host):
+    snaps = gather_snapshots(this_host)
+    if host not in snaps:
+        avail = ", ".join(sorted(snaps)) or "(none)"
+        sys.exit(f"wip: no snapshot from '{host}'. Available: {avail}")
+    return snaps[host]
+
+
+def cmd_diff(this_host, host):
+    rev = resolve_host(this_host, host)
+    return subprocess.run(["git", "diff", "HEAD", rev]).returncode
+
+
+def cmd_apply(this_host, host, force):
+    rev = resolve_host(this_host, host)
+    dirty = git(["status", "--porcelain"]).stdout.strip()
+    if dirty and not force:
+        sys.exit(
+            "wip: working tree is dirty — refusing to apply.\n"
+            "  Your changes are already snapshotted by the wip loop. Commit or\n"
+            "  stash them, or re-run with --force to 3-way-merge on top."
+        )
+    patch = git(["diff", "--binary", "HEAD", rev]).stdout
+    if not patch.strip():
+        print(f"Nothing to apply — {host}'s snapshot matches your HEAD.")
+        return 0
+    proc = subprocess.run(
+        ["git", "apply", "--3way", "--whitespace=nowarn"],
+        input=patch,
+        text=True,
+        capture_output=True,
+    )
+    sys.stderr.write(proc.stderr)
+    if proc.returncode == 0:
+        print(f"Applied {host}'s WIP onto your working tree.")
+    else:
+        print(
+            "Applied with conflicts — resolve the conflict markers, then "
+            "`git add` the files.",
+            file=sys.stderr,
+        )
+    return proc.returncode
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        prog="wip",
+        description=__doc__.split("\n", 1)[0],
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub = ap.add_subparsers(dest="cmd")
+    sub.add_parser("list", help="list snapshots from other hosts (default)")
+    p_diff = sub.add_parser("diff", help="show a host's snapshot diff vs HEAD")
+    p_diff.add_argument("host")
+    p_apply = sub.add_parser("apply", help="overlay a host's WIP onto yours")
+    p_apply.add_argument("host")
+    p_apply.add_argument(
+        "--force",
+        action="store_true",
+        help="apply even if your working tree is dirty (3-way)",
+    )
+    args = ap.parse_args()
+
+    this_host = sanitized_hostname()
+    os.chdir(repo_root())  # operate from the repo root regardless of cwd
+    if args.cmd == "diff":
+        return cmd_diff(this_host, args.host)
+    if args.cmd == "apply":
+        return cmd_apply(this_host, args.host, args.force)
+    return cmd_list(this_host)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

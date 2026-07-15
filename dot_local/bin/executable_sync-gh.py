@@ -9,17 +9,39 @@ detached-HEAD, and mid-rebase/merge/cherry-pick repos are skipped.
 """
 
 import argparse
+import datetime
 import json
 import os
 import re
 import shutil
 import socket
 import subprocess
+import tempfile
 from pathlib import Path
 
 # Branch-name-safe sanitizer for hostnames (covers macOS names with
 # apostrophes/spaces like "Jason's MBP").
 _BRANCH_SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
+
+# Flattens a repo path into a collision-free bundle-filename key.
+_KEY_SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
+
+
+def bundle_key(dest):
+    """Stable, collision-free bundle basename for a repo.
+
+    Uses the repo's path relative to $HOME with separators flattened, so repos
+    that merely share a directory name (e.g. ~/Code/gh/public/notes vs
+    ~/Projects/notes) never collide on the same bundle file. Paths are identical
+    across the fleet (all ~/…), so the key matches on the receiving machine too.
+    """
+    dest = Path(dest).resolve()
+    try:
+        rel = dest.relative_to(Path.home().resolve())
+    except ValueError:
+        rel = Path(*dest.parts[1:])  # outside home: drop the leading '/'
+    return _KEY_SAFE.sub("-", str(rel)).strip("-") or "repo"
+
 
 # Files/dirs whose presence indicates an in-progress operation that we
 # should not snapshot (state isn't a coherent point-in-time view).
@@ -36,6 +58,19 @@ GH_DIR = Path.home() / "Code" / "gh"
 ARCHIVED_DIR = GH_DIR / "archived"
 PUBLIC_DIR = GH_DIR / "public"
 ARCHIVED_PUBLIC_DIR = ARCHIVED_DIR / "public"
+
+# --wip-only writes bundles for repos with no private GitHub origin here. It's
+# a Syncthing-synced, non-git folder — one bundle file per repo per host, so
+# it rides Syncthing without the .git/ conflict storms.
+WIP_BUNDLE_DIR = Path.home() / ".local" / "share" / "wip-bundles"
+
+# Roots scanned by --wip-only for working-tree snapshots (no GitHub API). Repos
+# directly under GH_DIR push to a wip branch; PUBLIC_DIR and ~/Projects bundle.
+WIP_SCAN_ROOTS = [GH_DIR, PUBLIC_DIR, Path.home() / "Projects"]
+
+# Heartbeat touched at the end of every --wip-only run so the backup monitor
+# can tell WIP protection is alive (its mtime = last successful sweep).
+WIP_STATUS_FILE = Path.home() / ".local" / "var" / "wip-sync.status"
 
 # Where to look for an explicit org list, in precedence order:
 #   1. $SYNC_GH_ORGS env var
@@ -148,95 +183,221 @@ def in_progress_op(dest):
     return None
 
 
+def _git(dest, args, env=None, check=False):
+    """Run `git -C dest ...`, capturing output. Thin wrapper for brevity."""
+    return subprocess.run(
+        ["git", "-C", str(dest), *args],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=check,
+    )
+
+
+def has_head(dest):
+    """True if HEAD resolves to a commit (repo has at least one commit)."""
+    return _git(dest, ["rev-parse", "--verify", "--quiet", "HEAD"]).returncode == 0
+
+
+def has_origin(dest):
+    """True if the repo has an `origin` remote."""
+    return _git(dest, ["remote", "get-url", "origin"]).returncode == 0
+
+
+def snapshot_commit(dest, message):
+    """Commit the full working tree without disturbing the repo.
+
+    Captures tracked modifications, the staged index, AND untracked-but-not-
+    ignored files (a brand-new file you haven't `git add`ed is exactly the WIP
+    you'd hate to lose). Returns the new commit SHA, or None if the working
+    tree already matches HEAD (nothing to snapshot).
+
+    Works through a throwaway index via GIT_INDEX_FILE, so the user's real
+    staging area and working tree are never touched. `git add -A` in that index
+    honours .gitignore, so build junk / node_modules stay out of the snapshot.
+    """
+    git_dir = _git(dest, ["rev-parse", "--absolute-git-dir"]).stdout.strip()
+    if not git_dir:
+        return None
+    fd, tmp_index = tempfile.mkstemp(prefix="wip-index-", dir=git_dir)
+    os.close(fd)
+    # Remove the 0-byte file: git errors on an empty index file but happily
+    # creates a fresh one at a non-existent path (read-tree / add -A).
+    os.unlink(tmp_index)
+    env = {**os.environ, "GIT_INDEX_FILE": tmp_index}
+    head = has_head(dest)
+    try:
+        if head:
+            _git(dest, ["read-tree", "HEAD"], env=env, check=True)
+        _git(dest, ["add", "-A"], env=env, check=True)
+        tree = _git(dest, ["write-tree"], env=env, check=True).stdout.strip()
+        if head and tree == _git(dest, ["rev-parse", "HEAD^{tree}"]).stdout.strip():
+            return None  # working tree identical to HEAD
+        parent = ["-p", "HEAD"] if head else []
+        return _git(
+            dest, ["commit-tree", tree, *parent, "-m", message], check=True
+        ).stdout.strip()
+    finally:
+        try:
+            os.unlink(tmp_index)
+        except FileNotFoundError:
+            pass
+
+
 def push_wip(name, dest, hostname):
     """Push a snapshot of working state to wip/<hostname> on origin.
 
-    Uses `git stash create` to capture tracked changes + index without
-    modifying the working tree. Untracked files are intentionally not
-    included — they're more likely to be local junk than work to share.
-    Force-push because wip refs always replace the previous snapshot.
-    Skips: detached HEAD, mid-rebase/merge/cherry-pick (state isn't a
-    coherent snapshot to share).
+    Captures tracked changes, the index, and untracked-but-not-ignored files
+    via snapshot_commit. When the tree is clean, points wip/<host> at HEAD so
+    unpushed *commits* are captured too. Force-push because wip refs always
+    replace the previous snapshot. Skips detached HEAD and mid-rebase/merge/
+    cherry-pick (state isn't a coherent snapshot to share).
     """
     op = in_progress_op(dest)
     if op:
         print(f"  {name}: skipping wip (in-progress {op})")
         return
 
-    head = subprocess.run(
-        ["git", "-C", str(dest), "symbolic-ref", "-q", "HEAD"],
-        capture_output=True,
-        text=True,
-    )
-    if head.returncode != 0:
+    if _git(dest, ["symbolic-ref", "-q", "HEAD"]).returncode != 0:
         return  # detached HEAD
 
-    dirty = subprocess.run(
-        ["git", "-C", str(dest), "status", "--porcelain", "--untracked-files=no"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-
     branch = f"wip/{hostname}"
+    snap = snapshot_commit(dest, f"wip snapshot ({hostname})")
 
-    if dirty:
-        snap = subprocess.run(
-            ["git", "-C", str(dest), "stash", "create"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-        ref = snap or "HEAD"
-    else:
-        # Clean tree: if origin/wip/<host> already matches HEAD, nothing to
-        # push. The cached refs/remotes/origin/<branch> was just refreshed
-        # by the prior `git pull --ff-only`, so it's accurate enough; a
-        # stale read here only causes a redundant push (no correctness
-        # impact). For dirty trees we always push because each `stash
-        # create` produces a new SHA even with identical content (commit
-        # timestamps differ).
-        head_sha = subprocess.run(
-            ["git", "-C", str(dest), "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-        cached = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(dest),
-                "rev-parse",
-                "--verify",
-                "--quiet",
-                f"refs/remotes/origin/{branch}",
-            ],
-            capture_output=True,
-            text=True,
+    if snap is None:
+        # Clean tree: capture unpushed commits by pointing wip at HEAD, but
+        # skip if origin/wip/<host> already matches HEAD (redundant push). The
+        # cached remote ref was just refreshed by the prior `git pull`, so a
+        # stale read only risks a harmless extra push.
+        head_sha = _git(dest, ["rev-parse", "HEAD"]).stdout.strip()
+        cached = _git(
+            dest, ["rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}"]
         )
         if cached.returncode == 0 and cached.stdout.strip() == head_sha:
-            return  # silent no-op
-        ref = "HEAD"
+            return  # nothing new
+        ref, suffix = "HEAD", ""
+    else:
+        ref, suffix = snap, " (snapshot of working tree)"
 
-    push = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(dest),
-            "push",
-            "--force",
-            "origin",
-            f"{ref}:refs/heads/{branch}",
-        ],
-        capture_output=True,
-        text=True,
-    )
+    push = _git(dest, ["push", "--force", "origin", f"{ref}:refs/heads/{branch}"])
     if push.returncode != 0:
         print(f"  {name}: wip push failed ({push.stderr.strip()})")
     else:
-        suffix = " (snapshot of dirty tree)" if dirty else ""
         print(f"  {name}: pushed → {branch}{suffix}")
+
+
+def bundle_wip(name, dest, hostname, bundle_dir):
+    """Snapshot working state into a per-host git bundle in bundle_dir.
+
+    For repos with no private GitHub origin (local-only, public, or under
+    ~/Projects). A bundle is a single file, so it rides Syncthing without the
+    many-small-mutating-files conflicts that syncing .git/ directly causes. The
+    working-tree snapshot (incl. new files) is stored on a local refs/wip/<host>
+    ref and bundled alongside all branches/tags.
+
+    Per-host filename (`<repo>@<host>.bundle`) so two machines never write the
+    same file. Skips re-bundling when nothing changed since the last run.
+    """
+    op = in_progress_op(dest)
+    if op:
+        print(f"  {name}: skipping bundle (in-progress {op})")
+        return
+
+    snap = snapshot_commit(dest, f"wip snapshot ({hostname})")
+    target = snap or ("HEAD" if has_head(dest) else None)
+    if target is None:
+        return  # empty repo, nothing to bundle
+
+    wip_ref = f"refs/wip/{hostname}"
+    _git(dest, ["update-ref", wip_ref, target], check=True)
+
+    # Change detection: signature over the wip ref + all branch/tag tips. Skip
+    # the (relatively expensive) bundle write when nothing moved since last time.
+    sig = _git(
+        dest,
+        [
+            "for-each-ref",
+            "--format=%(refname) %(objectname)",
+            "refs/heads",
+            "refs/tags",
+            wip_ref,
+        ],
+    ).stdout
+    git_dir = _git(dest, ["rev-parse", "--absolute-git-dir"]).stdout.strip()
+    sig_file = Path(git_dir) / f"wip-bundle-{hostname}.sig"
+    bundle_path = bundle_dir / f"{bundle_key(dest)}@{hostname}.bundle"
+    prev = sig_file.read_text() if sig_file.is_file() else None
+    if prev == sig and bundle_path.is_file():
+        return  # unchanged and bundle already present
+
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    tmp_path = bundle_path.with_name(bundle_path.name + ".tmp")
+    res = _git(dest, ["bundle", "create", str(tmp_path), "--all", wip_ref])
+    if res.returncode != 0:
+        print(f"  {name}: bundle failed ({res.stderr.strip()})")
+        tmp_path.unlink(missing_ok=True)
+        return
+    os.replace(tmp_path, bundle_path)  # atomic; Syncthing only ever sees a whole file
+    sig_file.write_text(sig)
+    print(f"  {name}: bundled → {bundle_path.name}")
+
+
+def classify_repo(dest):
+    """Route a local repo: 'push' (private GitHub), 'bundle', or 'skip'.
+
+    Only repos directly under ~/Code/gh (private-by-convention) with an origin
+    are pushed to a wip branch — we never push WIP to a public remote. Public
+    repos, ~/Projects repos, and remoteless/local-only repos are bundled.
+    Archived repos are skipped.
+    """
+    dest = Path(dest)
+    if not (dest / ".git").exists():
+        return "skip"
+    parent = dest.parent
+    if parent in (ARCHIVED_DIR, ARCHIVED_PUBLIC_DIR):
+        return "skip"
+    if parent == GH_DIR and has_origin(dest):
+        return "push"
+    return "bundle"
+
+
+def iter_local_repos(roots):
+    """Yield git working-copy dirs one level under each root."""
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for child in sorted(root.iterdir()):
+            if child.is_dir() and (child / ".git").exists():
+                yield child
+
+
+def wip_only_main(hostname, roots, bundle_dir):
+    """Fast, network-light path: snapshot every local repo's working tree and
+    push (private GitHub repos) or bundle (everything else). No GitHub API.
+    Intended to run every few minutes from a launchd agent.
+    """
+    for dest in iter_local_repos(roots):
+        # Isolate each repo: a single bad one (no committer identity, read-only
+        # mount, corrupt object) must not skip the rest — nor the heartbeat
+        # below, which the monitor reads as "WIP protection is alive".
+        try:
+            kind = classify_repo(dest)
+            if kind == "push":
+                push_wip(dest.name, dest, hostname)
+            elif kind == "bundle":
+                bundle_wip(dest.name, dest, hostname, bundle_dir)
+        except Exception as exc:  # noqa: BLE001 — daemon robustness, keep sweeping
+            print(f"  {dest.name}: wip snapshot failed ({exc})")
+    # No summary line: push_wip/bundle_wip already log only when they act, so a
+    # quiet machine writes nothing to the launchd log (which appends forever).
+    # The heartbeat below is the "it ran" signal the monitor checks.
+    try:
+        WIP_STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        WIP_STATUS_FILE.write_text(
+            datetime.datetime.now().isoformat(timespec="seconds") + "\n"
+        )
+    except OSError as exc:
+        print(f"wip-only: could not write heartbeat {WIP_STATUS_FILE}: {exc}")
 
 
 def repo_dir(repo):
@@ -260,6 +421,13 @@ def parse_args():
         action="store_false",
         help="Disable the default per-host wip-branch push for private repos.",
     )
+    ap.add_argument(
+        "--wip-only",
+        action="store_true",
+        help="Fast path: snapshot local repos' WIP and push (private GitHub) "
+        "or bundle (everything else) WITHOUT hitting the GitHub API. Intended "
+        "for the periodic launchd agent.",
+    )
     return ap.parse_args()
 
 
@@ -273,6 +441,10 @@ def sanitized_hostname():
 def main():
     args = parse_args()
     hostname = sanitized_hostname()
+
+    if args.wip_only:
+        wip_only_main(hostname, WIP_SCAN_ROOTS, WIP_BUNDLE_DIR)
+        return
 
     for d in ALL_REPO_DIRS:
         d.mkdir(parents=True, exist_ok=True)

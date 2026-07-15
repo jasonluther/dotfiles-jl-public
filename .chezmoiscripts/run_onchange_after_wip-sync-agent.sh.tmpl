@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# (Re)load the WIP autosnapshot launchd agent whenever its plist changes, so
+# `chezmoi apply` activates/updates it with no manual step. macOS only.
+#
+# Rerun trigger — hash of the managed plist:
+#   plist: {{ include "private_Library/LaunchAgents/net.ixid.jasonluther.wip-sync.plist.tmpl" | sha256sum }}
+{{ if eq .chezmoi.os "darwin" -}}
+set -uo pipefail
+
+LABEL="net.ixid.jasonluther.wip-sync"
+PLIST="{{ .chezmoi.homeDir }}/Library/LaunchAgents/${LABEL}.plist"
+DOMAIN="gui/$(id -u)"
+
+# launchd does not create the log's parent directory; make sure it exists.
+mkdir -p "{{ .chezmoi.homeDir }}/.local/var/log"
+
+if [[ ! -f "$PLIST" ]]; then
+  echo "wip-sync: plist not found at $PLIST; skipping load." >&2
+  exit 0
+fi
+
+# Reload: bootout any running instance (ignore if not loaded), then bootstrap.
+launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+if ! launchctl bootstrap "$DOMAIN" "$PLIST"; then
+  echo "warning: launchctl bootstrap $LABEL failed; continuing chezmoi apply." >&2
+fi
+launchctl enable "$DOMAIN/$LABEL" 2>/dev/null || true
+{{ end -}}

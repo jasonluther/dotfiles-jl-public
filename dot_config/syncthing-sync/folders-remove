@@ -1,0 +1,8 @@
+// Folders to drop from this Syncthing instance on `chezmoi apply` (one per
+// line, by folder path or id; `//` starts a comment). Git repositories are
+// protected by the WIP autosnapshot mechanism (sync-gh.py --wip-only), not
+// Syncthing, so ~/Code is no longer synced.
+//
+// Optional file — absent or empty means "remove nothing". Removing a Syncthing
+// folder only stops syncing it; local files are left in place (reversible).
+~/Code
