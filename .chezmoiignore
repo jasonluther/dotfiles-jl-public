@@ -11,6 +11,7 @@ install.sh
 copier.yml
 docs/
 templates/
+tests/
 
 # macOS-only .chezmoiscripts/* gate themselves inside the template with
 # an `eq .chezmoi.os "darwin"` check — chezmoiignore does not apply to
