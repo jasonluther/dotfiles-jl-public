@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Merge the managed VS Code user settings into the machine's existing
+# settings.json. Shared by the Code, code-server, and macOS Code targets via
+# their modify_ wrappers: chezmoi pipes the current on-disk file in on stdin and
+# uses our stdout as the new contents.
+#
+# Policy: LOCAL wins. Your in-app / GUI edits are preserved; the managed template
+# only fills in keys you have not set yourself. This is why these are modify_
+# (merge) scripts and not plain templates — a plain template under
+# `chezmoi apply --force` (the daily updater) would silently revert every GUI
+# change. Keys the template does not mention are left untouched.
+#
+# Fallback: if the live file is not valid JSON (e.g. you hand-added // comments),
+# emit the managed content verbatim so a non-interactive apply never errors —
+# i.e. it degrades to the old force-overwrite behavior rather than failing.
+set -euo pipefail
+
+local_json="$(cat)"
+managed_json="$(cat <<'MANAGED_JSON_EOF'
+{{ template "code-user-settings.json" . }}
+MANAGED_JSON_EOF
+)"
+
+if printf '%s' "$local_json" | jq -e . >/dev/null 2>&1; then
+  # `$m * $l` = managed base, local overrides -> local wins, managed seeds gaps.
+  jq -n --argjson m "$managed_json" --argjson l "$local_json" '$m * $l'
+else
+  # Normalize through jq so this path's output matches the merge path's
+  # formatting exactly (otherwise the next apply sees spurious churn).
+  printf '%s' "$managed_json" | jq .
+fi

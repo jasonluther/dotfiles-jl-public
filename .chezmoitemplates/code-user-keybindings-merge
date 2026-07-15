@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Merge the managed VS Code keybindings into the machine's existing
+# keybindings.json. Shared by the Code, code-server, and macOS Code targets via
+# their modify_ wrappers: chezmoi pipes the current file in on stdin and uses our
+# stdout as the new contents.
+#
+# keybindings.json is a JSON *array*, so "local wins" means: keep ALL local
+# bindings, then append any managed bindings not already present (exact-match
+# dedupe). Full-line // comments are stripped before parsing (jq is not
+# JSONC-aware) and the managed header comment is re-emitted on top.
+#
+# Fallback: if the live file cannot be parsed as a JSON array, emit the managed
+# content so a non-interactive `chezmoi apply --force` never errors.
+set -euo pipefail
+
+local_raw="$(cat)"
+managed_raw="$(cat <<'MANAGED_JSON_EOF'
+{{ template "code-user-keybindings.json" . }}
+MANAGED_JSON_EOF
+)"
+
+strip_line_comments() { grep -vE '^[[:space:]]*//' || true; }
+managed_arr="$(printf '%s' "$managed_raw" | strip_line_comments)"
+comments="$(printf '%s' "$managed_raw" | grep -E '^[[:space:]]*//' || true)"
+
+if local_clean="$(printf '%s' "$local_raw" | strip_line_comments)" \
+   && printf '%s' "$local_clean" | jq -e 'type=="array"' >/dev/null 2>&1; then
+  # local first, then managed entries not already present (array difference).
+  merged="$(jq -n --argjson l "$local_clean" --argjson m "$managed_arr" '$l + ($m - $l)')"
+else
+  # Normalize through jq so this path matches the merge path's formatting
+  # exactly (otherwise the next apply sees spurious churn).
+  merged="$(printf '%s' "$managed_arr" | jq .)"
+fi
+
+[ -n "$comments" ] && printf '%s\n' "$comments"
+printf '%s\n' "$merged"
