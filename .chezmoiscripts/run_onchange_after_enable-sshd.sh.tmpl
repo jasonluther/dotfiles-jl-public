@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Thin wrapper for scripts/macos/enable-sshd.sh.
+# run_onchange_: re-runs whenever the wrapped script's content changes.
+#
+# script hash: {{ include "scripts/macos/enable-sshd.sh" | sha256sum }}
+
+{{ if eq .chezmoi.os "darwin" -}}
+exec {{ joinPath .chezmoi.sourceDir "scripts/macos/enable-sshd.sh" | quote }}
+{{- else -}}
+# macOS-only: skipped on {{ .chezmoi.os }}.
+{{- end }}
