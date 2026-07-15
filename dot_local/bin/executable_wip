@@ -71,10 +71,14 @@ def gather_snapshots(this_host):
     """
     snaps = {}
     if has_origin():
-        git(["fetch", "-q", "origin",
-             "+refs/heads/wip/*:refs/remotes/origin/wip/*"])
-        out = git(["for-each-ref", "--format=%(refname:strip=4) %(objectname)",
-                   "refs/remotes/origin/wip"]).stdout
+        git(["fetch", "-q", "origin", "+refs/heads/wip/*:refs/remotes/origin/wip/*"])
+        out = git(
+            [
+                "for-each-ref",
+                "--format=%(refname:strip=4) %(objectname)",
+                "refs/remotes/origin/wip",
+            ]
+        ).stdout
         for line in out.splitlines():
             host, _, sha = line.partition(" ")
             if host and host != this_host:
@@ -83,12 +87,13 @@ def gather_snapshots(this_host):
     key = bundle_key(repo_root())
     if WIP_BUNDLE_DIR.is_dir():
         for bundle in sorted(WIP_BUNDLE_DIR.glob(f"{key}@*.bundle")):
-            host = bundle.name[len(key) + 1: -len(".bundle")]
+            host = bundle.name[len(key) + 1 : -len(".bundle")]
             if not host or host == this_host:
                 continue
             # Import the bundle's wip ref into a local inspect ref.
-            fetched = git(["fetch", "-q", str(bundle),
-                           f"+refs/wip/{host}:refs/wip-remote/{host}"])
+            fetched = git(
+                ["fetch", "-q", str(bundle), f"+refs/wip/{host}:refs/wip-remote/{host}"]
+            )
             if fetched.returncode == 0:
                 snaps[host] = f"refs/wip-remote/{host}"
     return snaps
@@ -141,7 +146,9 @@ def cmd_apply(this_host, host, force):
         return 0
     proc = subprocess.run(
         ["git", "apply", "--3way", "--whitespace=nowarn"],
-        input=patch, text=True, capture_output=True,
+        input=patch,
+        text=True,
+        capture_output=True,
     )
     sys.stderr.write(proc.stderr)
     if proc.returncode == 0:
@@ -149,14 +156,16 @@ def cmd_apply(this_host, host, force):
     else:
         print(
             "Applied with conflicts — resolve the conflict markers, then "
-            "`git add` the files.", file=sys.stderr,
+            "`git add` the files.",
+            file=sys.stderr,
         )
     return proc.returncode
 
 
 def main():
     ap = argparse.ArgumentParser(
-        prog="wip", description=__doc__.split("\n", 1)[0],
+        prog="wip",
+        description=__doc__.split("\n", 1)[0],
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = ap.add_subparsers(dest="cmd")
@@ -165,8 +174,11 @@ def main():
     p_diff.add_argument("host")
     p_apply = sub.add_parser("apply", help="overlay a host's WIP onto yours")
     p_apply.add_argument("host")
-    p_apply.add_argument("--force", action="store_true",
-                         help="apply even if your working tree is dirty (3-way)")
+    p_apply.add_argument(
+        "--force",
+        action="store_true",
+        help="apply even if your working tree is dirty (3-way)",
+    )
     args = ap.parse_args()
 
     this_host = sanitized_hostname()
