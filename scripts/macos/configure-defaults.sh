@@ -136,3 +136,10 @@ sudo pmset -a womp 1
 if [[ "$(uname -m)" == "x86_64" ]]; then
   sudo pmset -a powernap 1
 fi
+# Idle sleep after 15 minutes (all power sources). Pinned because a stray
+# `sleep 1` on one machine idle-slept it mid-CI-run — macOS sleeps regardless
+# of CPU load, and a slept host suspends OrbStack's VM, wedging every
+# container-backed test until a human wakes it (partygame, 2026-07-15).
+# Long-running work holds its own assertions (caffeinate in with_ci_slot.py
+# and the runner job hooks), so 15 minutes here means truly idle.
+sudo pmset -a sleep 15
