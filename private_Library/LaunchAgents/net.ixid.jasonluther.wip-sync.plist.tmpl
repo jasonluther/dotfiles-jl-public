@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>net.ixid.jasonluther.wip-sync</string>
+
+    <!-- Fast, network-light WIP autosnapshot: snapshot every local repo's
+         working tree and push (private GitHub) or bundle (everything else).
+         No GitHub API, so it's cheap enough to run every few minutes. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{ .chezmoi.homeDir }}/.local/bin/sync-gh.py</string>
+        <string>--wip-only</string>
+    </array>
+
+    <!-- launchd starts with a minimal PATH; give the #!/usr/bin/env python3
+         shebang and git somewhere to resolve from. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{{ .chezmoi.homeDir }}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Stay out of the way of interactive work. -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+    <key>Nice</key>
+    <integer>5</integer>
+
+    <key>StandardOutPath</key>
+    <string>{{ .chezmoi.homeDir }}/.local/var/log/wip-sync.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{ .chezmoi.homeDir }}/.local/var/log/wip-sync.log</string>
+</dict>
+</plist>
