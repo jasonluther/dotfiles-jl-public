@@ -10,6 +10,9 @@ a repo:
     wip diff  <host>   show the full diff a host's snapshot would apply
     wip apply <host>   overlay that host's working-tree changes onto yours
 
+Snapshots taken in a linked worktree are listed as `host@worktree-dir`; pass
+that full name to diff/apply.
+
 `apply` never silently clobbers: it refuses on a dirty working tree unless
 --force, and even then applies via `git apply --3way`, which leaves conflict
 markers rather than overwriting. Your own WIP is separately snapshotted by the
@@ -63,11 +66,16 @@ def has_origin():
 
 
 def gather_snapshots(this_host):
-    """Return {host: rev} for every OTHER host with a snapshot for this repo.
+    """Return {snapshot: rev} for every OTHER host's snapshot of this repo.
 
     Fetches on demand so the listing is always fresh: wip/* branches from
-    origin (private GitHub repos) and refs/wip/<host> from each per-host bundle
-    (bundled repos). Bundle refs win if a host appears in both.
+    origin (private GitHub repos) and the wip ref inside each per-host bundle
+    (bundled repos). Bundle refs win if a name appears in both.
+
+    A snapshot name is a hostname, or host@worktree for a snapshot taken in a
+    linked worktree (sync-gh.py suffixes those so sibling worktrees never
+    clobber each other). Everything before the first '@' is the host — used
+    to exclude this machine's own snapshots, worktree or not.
     """
     snaps = {}
     if has_origin():
@@ -80,9 +88,9 @@ def gather_snapshots(this_host):
             ]
         ).stdout
         for line in out.splitlines():
-            host, _, sha = line.partition(" ")
-            if host and host != this_host:
-                snaps[host] = sha
+            name, _, sha = line.partition(" ")
+            if name and name.partition("@")[0] != this_host:
+                snaps[name] = sha
 
     key = bundle_key(repo_root())
     if WIP_BUNDLE_DIR.is_dir():
@@ -90,9 +98,19 @@ def gather_snapshots(this_host):
             host = bundle.name[len(key) + 1 : -len(".bundle")]
             if not host or host == this_host:
                 continue
-            # Import the bundle's wip ref into a local inspect ref.
+            # Import the bundle's wip ref into a local inspect ref. The ref
+            # name inside is refs/wip/<host> — or a worktree-suffixed variant —
+            # so discover it from the bundle instead of assuming.
+            heads = git(["bundle", "list-heads", str(bundle)]).stdout
+            wip_refs = [
+                line.split(" ", 1)[1]
+                for line in heads.splitlines()
+                if " refs/wip/" in line
+            ]
+            if not wip_refs:
+                continue
             fetched = git(
-                ["fetch", "-q", str(bundle), f"+refs/wip/{host}:refs/wip-remote/{host}"]
+                ["fetch", "-q", str(bundle), f"+{wip_refs[0]}:refs/wip-remote/{host}"]
             )
             if fetched.returncode == 0:
                 snaps[host] = f"refs/wip-remote/{host}"

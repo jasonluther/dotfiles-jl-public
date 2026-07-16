@@ -1,7 +1,7 @@
 """Integration tests for the `wip` receive helper."""
 
-import importlib.util
 import importlib.machinery
+import importlib.util
 import subprocess
 from pathlib import Path
 
@@ -132,3 +132,69 @@ def test_own_host_excluded(tmp_path, monkeypatch):
     monkeypatch.setattr(wip.socket, "gethostname", lambda: "hostA")  # same host!
     monkeypatch.chdir(B)
     assert wip.gather_snapshots("hostA") == {}  # never offer your own snapshot
+
+
+def test_worktree_snapshot_listed_and_applies(tmp_path, monkeypatch):
+    # A worktree on hostA pushes wip/hostA@myrepo-fix; hostB sees that token
+    # and can apply it like any other snapshot.
+    bare = tmp_path / "o.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    A = init_repo(tmp_path / "hostA" / "myrepo", origin=bare)
+    commit_file(A, "a.txt", "hello")
+    git(A, "push", "-q", "origin", "main")
+    wt = tmp_path / "hostA" / "myrepo-fix"
+    git(A, "worktree", "add", "-q", "-b", "fix", str(wt))
+    (wt / "wt_wip.txt").write_text("from A's worktree")
+    sg.push_wip("myrepo-fix", wt, "hostA")
+
+    B = clone(bare, tmp_path / "hostB" / "myrepo")
+    monkeypatch.setattr(wip, "WIP_BUNDLE_DIR", tmp_path / "none")
+    monkeypatch.setattr(wip.socket, "gethostname", lambda: "hostB")
+    monkeypatch.chdir(B)
+    snaps = wip.gather_snapshots("hostB")
+    assert "hostA@myrepo-fix" in snaps
+    assert wip.cmd_apply("hostB", "hostA@myrepo-fix", force=False) == 0
+    assert (B / "wt_wip.txt").read_text() == "from A's worktree"
+
+
+def test_own_worktree_snapshot_excluded(tmp_path, monkeypatch):
+    # wip/hostA@somewt is still hostA's own state — never offered back to hostA.
+    bare = tmp_path / "o.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    A = init_repo(tmp_path / "hostA" / "myrepo", origin=bare)
+    commit_file(A, "a.txt", "hello")
+    git(A, "push", "-q", "origin", "main")
+    wt = tmp_path / "hostA" / "myrepo-fix"
+    git(A, "worktree", "add", "-q", "-b", "fix", str(wt))
+    (wt / "w.txt").write_text("x")
+    sg.push_wip("myrepo-fix", wt, "hostA")
+    monkeypatch.setattr(wip, "WIP_BUNDLE_DIR", tmp_path / "none")
+    monkeypatch.setattr(wip.socket, "gethostname", lambda: "hostA")
+    monkeypatch.chdir(A)
+    assert wip.gather_snapshots("hostA") == {}
+
+
+def test_apply_from_worktree_bundle(tmp_path, monkeypatch):
+    # Bundles from a worktree carry a suffixed internal ref; the receive side
+    # must discover it from the bundle rather than assuming refs/wip/<host>.
+    home_a, home_b = tmp_path / "A", tmp_path / "B"
+    A = init_repo(home_a / "proj" / "myrepo")
+    commit_file(A, "a.txt", "hello")
+    wt = home_a / "proj" / "myrepo-fix"
+    git(A, "worktree", "add", "-q", "-b", "fix", str(wt))
+    (wt / "wt_wip.txt").write_text("from A's worktree")
+    bundles = tmp_path / "bundles"
+    monkeypatch.setenv("HOME", str(home_a))
+    sg.bundle_wip("myrepo-fix", wt, "hostA", bundles)
+
+    # hostB has an ordinary checkout at the same HOME-relative path
+    monkeypatch.setenv("HOME", str(home_b))
+    B = init_repo(home_b / "proj" / "myrepo-fix")
+    commit_file(B, "a.txt", "hello")
+    monkeypatch.setattr(wip, "WIP_BUNDLE_DIR", bundles)
+    monkeypatch.setattr(wip.socket, "gethostname", lambda: "hostB")
+    monkeypatch.chdir(B)
+    snaps = wip.gather_snapshots("hostB")
+    assert "hostA" in snaps
+    assert wip.cmd_apply("hostB", "hostA", force=False) == 0
+    assert (B / "wt_wip.txt").read_text() == "from A's worktree"

@@ -2,10 +2,11 @@
 """Sync all GitHub repos for the authenticated user into the gh/ directory.
 
 By default, also pushes a per-host snapshot of each PRIVATE repo's working
-state to a `wip/<hostname>` branch on origin, so work-in-progress flows
-between machines without relying on Syncthing replicating .git/. Pass
---no-push-wip to disable. Public repos are never auto-pushed; archived,
-detached-HEAD, and mid-rebase/merge/cherry-pick repos are skipped.
+state to a `wip/<hostname>` branch on origin (`wip/<hostname>@<dirname>` from
+a linked worktree), so work-in-progress flows between machines without
+relying on Syncthing replicating .git/. Pass --no-push-wip to disable. Public
+repos are never auto-pushed; archived, detached-HEAD, and
+mid-rebase/merge/cherry-pick repos are skipped.
 """
 
 import argparse
@@ -204,6 +205,26 @@ def has_origin(dest):
     return _git(dest, ["remote", "get-url", "origin"]).returncode == 0
 
 
+def wip_ref_suffix(dest):
+    """'@<dirname>' when dest is a linked worktree, else ''.
+
+    Sibling worktrees share the repo's origin and ref storage, so an
+    unsuffixed name would make every worktree of a repo write the SAME
+    wip/<host> ref — the last one scanned wins, silently replacing the main
+    checkout's snapshot. Suffixing by worktree dirname keeps each checkout's
+    snapshot distinct ('@' can't appear in a sanitized hostname or dirname,
+    so parsing on the receive side stays unambiguous, and 'wip/<host>' plus
+    'wip/<host>@<dir>' never collide in the ref namespace the way a '/'
+    separator would). A linked worktree is detected by its .git being a
+    gitdir-pointer file rather than a directory.
+    """
+    dest = Path(dest)
+    if (dest / ".git").is_file():
+        name = _BRANCH_SAFE.sub("-", dest.name).strip("-.")
+        return f"@{name or 'worktree'}"
+    return ""
+
+
 def snapshot_commit(dest, message):
     """Commit the full working tree without disturbing the repo.
 
@@ -250,8 +271,10 @@ def push_wip(name, dest, hostname):
     Captures tracked changes, the index, and untracked-but-not-ignored files
     via snapshot_commit. When the tree is clean, points wip/<host> at HEAD so
     unpushed *commits* are captured too. Force-push because wip refs always
-    replace the previous snapshot. Skips detached HEAD and mid-rebase/merge/
-    cherry-pick (state isn't a coherent snapshot to share).
+    replace the previous snapshot. Linked worktrees push to a suffixed
+    wip/<host>@<dirname> branch so siblings never clobber each other's
+    snapshot. Skips detached HEAD and mid-rebase/merge/cherry-pick (state
+    isn't a coherent snapshot to share).
     """
     op = in_progress_op(dest)
     if op:
@@ -261,7 +284,7 @@ def push_wip(name, dest, hostname):
     if _git(dest, ["symbolic-ref", "-q", "HEAD"]).returncode != 0:
         return  # detached HEAD
 
-    branch = f"wip/{hostname}"
+    branch = f"wip/{hostname}{wip_ref_suffix(dest)}"
     snap = snapshot_commit(dest, f"wip snapshot ({hostname})")
 
     if snap is None:
@@ -308,7 +331,10 @@ def bundle_wip(name, dest, hostname, bundle_dir):
     if target is None:
         return  # empty repo, nothing to bundle
 
-    wip_ref = f"refs/wip/{hostname}"
+    # Suffixed per worktree: refs/wip/* lives in the SHARED repo storage, so
+    # a sibling worktree writing the same name between our update-ref and the
+    # bundle create below would bundle the wrong tree under this repo's key.
+    wip_ref = f"refs/wip/{hostname}{wip_ref_suffix(dest)}"
     _git(dest, ["update-ref", wip_ref, target], check=True)
 
     # Change detection: signature over the wip ref + all branch/tag tips. Skip
