@@ -1,8 +1,11 @@
 #!/bin/bash
-# Install the personal Terminal profile and set it as the default.
+# Install a Terminal profile and set it as the default.
 #
 # Run manually on a fresh machine after dotfiles bootstrap:
 #   ~/.local/share/chezmoi/scripts/macos/install-terminal-profile.sh
+#
+# Pass a profile path to install a different one, e.g. the personal overlay's:
+#   .../install-terminal-profile.sh ~/.local/share/chezmoi-personal/scripts/macos/"Jason 2026.terminal"
 #
 # Idempotent — re-running is safe.
 #
@@ -13,9 +16,10 @@
 
 set -euo pipefail
 
-PROFILE_NAME="Terminal 2026"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROFILE_FILE="$SCRIPT_DIR/$PROFILE_NAME.terminal"
+# Optional arg: path to a .terminal profile (default: the repo's own).
+PROFILE_FILE="${1:-$SCRIPT_DIR/Terminal 2026.terminal}"
+PROFILE_NAME="$(basename "$PROFILE_FILE" .terminal)"
 TERM_PLIST="$HOME/Library/Preferences/com.apple.Terminal.plist"
 
 if [ ! -f "$PROFILE_FILE" ]; then
