@@ -1,0 +1,14 @@
+# Claude
+**/.claude/settings.local.json
+.main-edit-ok
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Editors
+*.swp
+*.swo
+*~
