@@ -38,5 +38,13 @@ APT::Periodic::Unattended-Upgrade "1";
 EOF
 sudo chmod 0644 /etc/apt/apt.conf.d/20auto-upgrades
 
-sudo systemctl enable --now apt-daily.timer apt-daily-upgrade.timer
-sudo systemctl enable unattended-upgrades.service
+# `/run/systemd/system` is the canonical "systemd is PID 1" check (sd_booted).
+# Without it (Docker containers, chroots) `systemctl --now` can't reach the
+# bus and aborts the apply; the config drop-ins above are still written, so
+# the units activate normally on a real boot.
+if [ -d /run/systemd/system ]; then
+  sudo systemctl enable --now apt-daily.timer apt-daily-upgrade.timer
+  sudo systemctl enable unattended-upgrades.service
+else
+  echo "unattended-upgrades: systemd not running (container/chroot?) — skipping unit enable" >&2
+fi
