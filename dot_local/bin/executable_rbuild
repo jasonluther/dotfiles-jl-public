@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# rbuild — run a build (or any command) on a powerful remote host over SSH/Tailscale.
+#
+# Syncs the current git repo to the remote (respecting .gitignore), runs the
+# command there in a login shell, and streams the output back. Optionally pulls
+# build artifacts back when the command succeeds.
+#
+# Usage:
+#   rbuild <command...>                 # sync cwd's repo to $RBUILD_HOST, run there
+#   rbuild -H host <command...>         # override the remote host
+#   rbuild --pull 'glob' <command...>   # on success, rsync matching artifacts back to cwd
+#   rbuild -n <command...>              # dry-run (show the sync + command, change nothing)
+#
+# The command runs in the remote copy of whatever subdirectory you invoked it
+# from, so `cd m5dial && rbuild pio run` builds m5dial/ on the remote.
+#
+# Env:
+#   RBUILD_HOST   default remote host          (set it in your shell env)
+#   RBUILD_ROOT   remote parent dir for repos  (default: ~/rbuild)
+set -euo pipefail
+
+host="${RBUILD_HOST:-}"
+remote_root="${RBUILD_ROOT:-rbuild}"
+pull_glob=""
+dry=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -H | --host)
+      host="$2"
+      shift 2
+      ;;
+    --pull)
+      pull_glob="$2"
+      shift 2
+      ;;
+    -n | --dry-run)
+      dry=1
+      shift
+      ;;
+    -h | --help)
+      sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "rbuild: unknown option $1" >&2
+      exit 2
+      ;;
+    *) break ;;
+  esac
+done
+[ $# -gt 0 ] || {
+  echo "usage: rbuild [-H host] [--pull glob] [-n] <command...>" >&2
+  exit 2
+}
+[ -n "$host" ] || {
+  echo "rbuild: no remote host — set RBUILD_HOST or pass -H <host>" >&2
+  exit 2
+}
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" \
+  || {
+    echo "rbuild: not inside a git repo" >&2
+    exit 1
+  }
+name="$(basename "$repo_root")"
+dest="$remote_root/$name"
+# relative subdir of cwd within the repo (portable; resolve symlinks so the
+# physical $PWD matches git's physical repo root — e.g. /tmp -> /private/tmp)
+here="$(pwd -P)"
+rel="${here#"$repo_root"}"
+rel="${rel#/}"
+[ -z "$rel" ] && rel="."
+if [ "$rel" = "." ]; then remote_dir="$dest"; else remote_dir="$dest/$rel"; fi
+
+echo "rbuild: $name → $host:$dest  (subdir: $rel)" >&2
+
+rsync_opts=(-az --delete --filter=':- .gitignore' --exclude='.git/')
+[ "$dry" = 1 ] && rsync_opts+=(-n)
+# shellcheck disable=SC2029 # client-side expansion is intentional (printf %q quoted)
+ssh "$host" "mkdir -p $(printf '%q' "$dest")"
+rsync "${rsync_opts[@]}" "$repo_root/" "$host:$dest/"
+
+printf -v cmd '%q ' "$@"
+if [ "$dry" = 1 ]; then
+  echo "rbuild: would run on $host: cd $remote_dir && $cmd" >&2
+  exit 0
+fi
+
+status=0
+tflag=()
+[ -t 1 ] && tflag=(-t) # allocate a pty only for interactive use
+# shellcheck disable=SC2029 # client-side expansion is intentional (printf %q quoted)
+ssh "${tflag[@]}" "$host" "cd $(printf '%q' "$remote_dir") && bash -lc $(printf '%q' "$cmd")" || status=$?
+
+if [ -n "$pull_glob" ] && [ "$status" -eq 0 ]; then
+  echo "rbuild: pulling artifacts matching '$pull_glob'" >&2
+  # shellcheck disable=SC2086
+  rsync -az "$host:$remote_dir/"$pull_glob ./ || true
+fi
+exit "$status"
