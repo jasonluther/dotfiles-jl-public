@@ -17,12 +17,16 @@ if ! zsh_path="$(command -v zsh)"; then
   exit 0
 fi
 
+# `$USER` isn't always set (Docker containers, su -, some launchd contexts);
+# `id -un` is reliable everywhere.
+current_user="${USER:-$(id -un)}"
+
 case "$(uname)" in
   Darwin)
-    current="$(dscl . -read "/Users/$USER" UserShell 2>/dev/null | awk '{print $2}')"
+    current="$(dscl . -read "/Users/$current_user" UserShell 2>/dev/null | awk '{print $2}')"
     ;;
   *)
-    current="$(getent passwd "$USER" | cut -d: -f7)"
+    current="$(getent passwd "$current_user" | cut -d: -f7)"
     ;;
 esac
 
@@ -38,5 +42,5 @@ if [[ -f /etc/shells ]] && ! grep -qxF "$zsh_path" /etc/shells; then
   echo "$zsh_path" | sudo tee -a /etc/shells >/dev/null
 fi
 
-echo "==> chsh -s $zsh_path $USER (was $current)"
-sudo chsh -s "$zsh_path" "$USER"
+echo "==> chsh -s $zsh_path $current_user (was $current)"
+sudo chsh -s "$zsh_path" "$current_user"
