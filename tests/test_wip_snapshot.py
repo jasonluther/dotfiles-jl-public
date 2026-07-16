@@ -4,7 +4,6 @@ import importlib.util
 import subprocess
 from pathlib import Path
 
-
 SRC = (
     Path(__file__).resolve().parents[1] / "dot_local" / "bin" / "executable_sync-gh.py"
 )
@@ -350,3 +349,95 @@ def test_wip_only_continues_past_failing_repo(tmp_path, monkeypatch):
 
     assert status.is_file()  # heartbeat still written despite r1 failure
     assert (bundles / f"{sg.bundle_key(r2)}@hostx.bundle").is_file()  # r2 processed
+
+
+# ---------- linked worktrees (per-worktree wip refs) ----------
+#
+# Sibling worktrees share the repo's origin, so without a per-worktree suffix
+# every worktree of a repo force-pushes the SAME wip/<host> branch — the
+# alphabetically-last one scanned silently replaces the main checkout's
+# snapshot (observed clobbering 16k+ lines of main-checkout WIP).
+
+
+def test_wip_ref_suffix_main_vs_worktree(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    wt = tmp_path / "r-feature"
+    git(r, "worktree", "add", "-q", "-b", "feature", str(wt))
+    assert sg.wip_ref_suffix(r) == ""
+    assert sg.wip_ref_suffix(wt) == "@r-feature"
+
+
+def test_push_wip_worktree_does_not_clobber_main_snapshot(tmp_path):
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    r = init_repo(tmp_path / "r", origin=bare)
+    commit_file(r, "a.txt", "hello")
+    git(r, "push", "-q", "origin", "main")
+    wt = tmp_path / "r-zzz"
+    git(r, "worktree", "add", "-q", "-b", "zzz", str(wt))
+    (r / "main_wip.txt").write_text("main checkout WIP")
+    (wt / "wt_wip.txt").write_text("worktree WIP")
+
+    sg.push_wip("r", r, "hostx")
+    sg.push_wip("r-zzz", wt, "hostx")  # scanned later (sorts after main checkout)
+
+    main_files = ls_tree_files(bare, "refs/heads/wip/hostx")
+    assert "main_wip.txt" in main_files  # the regression: this got clobbered
+    assert "wt_wip.txt" not in main_files
+    wt_files = ls_tree_files(bare, "refs/heads/wip/hostx@r-zzz")
+    assert "wt_wip.txt" in wt_files
+    assert "main_wip.txt" not in wt_files
+
+
+def test_wip_only_main_covers_main_and_worktree(tmp_path, monkeypatch):
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    gh = tmp_path / "gh"
+    monkeypatch.setattr(sg, "GH_DIR", gh)
+    monkeypatch.setattr(sg, "PUBLIC_DIR", gh / "public")
+    monkeypatch.setattr(sg, "ARCHIVED_DIR", gh / "archived")
+    monkeypatch.setattr(sg, "ARCHIVED_PUBLIC_DIR", gh / "archived" / "public")
+    monkeypatch.setattr(sg, "WIP_STATUS_FILE", tmp_path / "var" / "wip.status")
+    r = init_repo(gh / "r", origin=bare)
+    commit_file(r, "a.txt", "hello")
+    git(r, "push", "-q", "origin", "main")
+    wt = gh / "r-zzz"
+    git(r, "worktree", "add", "-q", "-b", "zzz", str(wt))
+    (r / "main_wip.txt").write_text("m")
+    (wt / "wt_wip.txt").write_text("w")
+
+    sg.wip_only_main("hostx", [gh], tmp_path / "bundles")
+
+    assert "main_wip.txt" in ls_tree_files(bare, "refs/heads/wip/hostx")
+    assert "wt_wip.txt" in ls_tree_files(bare, "refs/heads/wip/hostx@r-zzz")
+
+
+def test_bundle_wip_worktree_suffixed_ref_no_shared_ref_race(tmp_path):
+    # refs/wip/<host> lives in the SHARED repo storage, so an unsuffixed ref
+    # would let a sibling worktree move it between the main repo's update-ref
+    # and its bundle write, bundling the wrong tree under the main repo's key.
+    r = init_repo(tmp_path / "Projects" / "notes")
+    commit_file(r, "a.txt", "hello")
+    wt = tmp_path / "Projects" / "notes-fix"
+    git(r, "worktree", "add", "-q", "-b", "fix", str(wt))
+    (r / "main_wip.txt").write_text("m")
+    (wt / "wt_wip.txt").write_text("w")
+    bundles = tmp_path / "bundles"
+
+    sg.bundle_wip("notes", r, "hostx", bundles)
+    sg.bundle_wip("notes-fix", wt, "hostx", bundles)
+
+    # the worktree's bundle run must not have moved the main repo's wip ref
+    main_ref = ls_tree_files(r, "refs/wip/hostx")
+    assert "main_wip.txt" in main_ref
+    assert "wt_wip.txt" not in main_ref
+    # the worktree's own WIP restores from its bundle under the suffixed ref
+    check = init_repo(tmp_path / "check")
+    git(
+        check,
+        "fetch",
+        str(bundles / f"{sg.bundle_key(wt)}@hostx.bundle"),
+        "refs/wip/hostx@notes-fix:refs/x",
+    )
+    assert "wt_wip.txt" in ls_tree_files(check, "refs/x")
