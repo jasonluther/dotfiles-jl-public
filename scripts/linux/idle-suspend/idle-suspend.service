@@ -1,0 +1,6 @@
+[Unit]
+Description=Suspend the machine after a sustained idle period
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/idle-suspend

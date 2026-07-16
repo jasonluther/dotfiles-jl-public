@@ -1,0 +1,70 @@
+#!/bin/bash
+# idle-suspend — suspend the machine after a sustained idle period.
+#
+# Run periodically (systemd timer). "Busy" = established inbound SSH
+# connections, Tailscale SSH sessions (tailscaled terminates those in
+# userspace — no kernel TCP socket on the SSH port, so they're counted
+# as child processes of tailscaled instead), processes named in
+# BUSY_PROCS (network-bound agents like claude barely move the load
+# average), OR 15-min load average >= threshold. After
+# IDLE_CHECKS_REQUIRED consecutive idle runs, suspends via
+# `systemctl suspend` (which honors systemd-inhibit sleep locks).
+#
+# Fail-safe: set -euo pipefail — any error exits nonzero without suspending.
+set -euo pipefail
+
+CONF=${IDLE_SUSPEND_CONF:-/etc/idle-suspend.conf}
+# shellcheck source=/dev/null
+[ -r "$CONF" ] && . "$CONF"
+SSH_PORT=${SSH_PORT:-22}
+LOAD_THRESHOLD=${LOAD_THRESHOLD:-0.8}
+IDLE_CHECKS_REQUIRED=${IDLE_CHECKS_REQUIRED:-6}
+BUSY_PROCS=${BUSY_PROCS:-claude}
+
+STATE_DIR=${IDLE_SUSPEND_STATE_DIR:-/run/idle-suspend}
+COUNT_FILE=$STATE_DIR/idle-count
+mkdir -p "$STATE_DIR"
+
+busy=()
+
+ssh_count=$(ss -Hnt state established "( sport = :$SSH_PORT )" | wc -l)
+[ "$ssh_count" -gt 0 ] && busy+=("$ssh_count ssh connection(s)")
+
+# Count tailscaled's child processes. Tailscale SSH sessions are login(1)
+# children of tailscaled and have no kernel TCP socket on SSH_PORT. This
+# also counts any other tailscaled child (subnet-router helpers, etc.) —
+# that only ever over-reports busy, which is the fail-safe direction.
+ts_pid=$(pgrep -xo tailscaled || true)
+if [ -n "$ts_pid" ]; then
+  ts_count=$(pgrep -cP "$ts_pid" || true)
+  [ "${ts_count:-0}" -gt 0 ] && busy+=("$ts_count tailscaled child(ren)")
+fi
+
+for proc in $BUSY_PROCS; do
+  proc_count=$(pgrep -xc "$proc" || true)
+  [ "${proc_count:-0}" -gt 0 ] && busy+=("$proc_count $proc process(es)")
+done
+
+load15=$(awk '{print $3}' /proc/loadavg)
+if awk -v l="$load15" -v t="$LOAD_THRESHOLD" 'BEGIN { exit !(l >= t) }'; then
+  busy+=("load15 $load15 >= $LOAD_THRESHOLD")
+fi
+
+if [ "${#busy[@]}" -gt 0 ]; then
+  echo "busy: ${busy[*]} — idle counter reset"
+  echo 0 >"$COUNT_FILE"
+  exit 0
+fi
+
+count=$(cat "$COUNT_FILE" 2>/dev/null || echo 0)
+case $count in '' | *[!0-9]*) count=0 ;; esac
+count=$((count + 1))
+echo "$count" >"$COUNT_FILE"
+
+if [ "$count" -ge "$IDLE_CHECKS_REQUIRED" ]; then
+  echo "idle for $count consecutive checks — suspending"
+  echo 0 >"$COUNT_FILE"
+  systemctl suspend
+else
+  echo "idle ($count/$IDLE_CHECKS_REQUIRED)"
+fi

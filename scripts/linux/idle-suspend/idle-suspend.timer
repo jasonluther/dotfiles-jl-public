@@ -1,0 +1,9 @@
+[Unit]
+Description=Periodic idle check for auto-suspend
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
