@@ -1,0 +1,13 @@
+[Unit]
+Description=Enable Wake-on-LAN (magic packet) on $WOL_NIC
+# After=suspend.target + WantedBy=suspend.target makes this re-run on every
+# resume, in case the driver drops the WoL flag across a sleep cycle.
+After=network-pre.target suspend.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/idle-suspend.conf
+ExecStart=/usr/sbin/ethtool -s ${WOL_NIC} wol g
+
+[Install]
+WantedBy=multi-user.target suspend.target
