@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Order matters: ssh-keys must populate authorized_keys before harden-sshd
 # disables password auth, otherwise a fresh host would refuse all logins.
-DEFAULT_MODULES=(ssh-keys harden-sshd sudo-nopasswd base tailscale unattended-upgrades)
+DEFAULT_MODULES=(ssh-keys harden-sshd sudo-nopasswd base tailscale unattended-upgrades avahi-mdns)
 
 modules=("$@")
 if [[ ${#modules[@]} -eq 0 ]]; then
