@@ -1,8 +1,8 @@
 # Debian-only apt packages, installed in addition to common.txt on Linux.
 # Format: one package name per line. Blank lines and `#` comments allowed.
 #
-# Bootstrap-time essentials (curl, ca-certificates, openssh-server, gh repo)
-# are installed by bootstrap/linux/modules/base.sh — keep those there since
+# Bootstrap-time essentials (curl, ca-certificates, gnupg, gh repo)
+# are installed by scripts/linux/base.sh — keep those there since
 # they need to run before chezmoi apply.
 
 build-essential

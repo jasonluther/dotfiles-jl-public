@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
 # Install baseline prerequisites needed before chezmoi apply: curl,
-# ca-certificates, git, gh, claude. Idempotent.
+# ca-certificates, git, gnupg, gh, claude. Idempotent.
 
 set -euo pipefail
 
 # No leading `apt-get update` — install.sh just ran one before invoking
 # setup.sh, and the gh-install branch below runs another after adding the
 # upstream apt source. apt-get install is idempotent on already-present
-# packages, so re-listing the trio here is the standalone-use safety net.
+# packages, so re-listing the set here is the standalone-use safety net.
+#
+# gnupg: the run_onchange_before_00-* chezmoiscripts (1password-cli,
+# google-chrome) pipe `curl | sudo gpg --dearmor` to install apt signing
+# keys, and they run before install-packages.sh can install anything —
+# so gpg must already be present at apply time. debian:*-slim ships
+# without it (full installs happen to have it, which masked this).
 sudo apt-get install -y --no-install-recommends \
   git \
   curl \
-  ca-certificates
+  ca-certificates \
+  gnupg
 
 # GitHub CLI from upstream apt repo.
 if ! command -v gh >/dev/null 2>&1; then
