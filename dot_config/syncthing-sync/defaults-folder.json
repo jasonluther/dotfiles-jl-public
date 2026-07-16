@@ -2,14 +2,20 @@
   "rescanIntervalS": 3600,
   "fsWatcherEnabled": true,
   "fsWatcherDelayS": 10,
-  "ignorePerms": true,
+  "ignorePerms": false,
   "autoNormalize": true,
-  "minDiskFree": { "value": 1, "unit": "%" },
+  "minDiskFree": {
+    "value": 1,
+    "unit": "%"
+  },
   "order": "random",
   "ignoreDelete": false,
   "versioning": {
     "type": "staggered",
-    "params": { "cleanInterval": "3600", "maxAge": "7776000" },
+    "params": {
+      "cleanInterval": "3600",
+      "maxAge": "7776000"
+    },
     "cleanupIntervalS": 3600,
     "fsPath": "",
     "fsType": "basic"
