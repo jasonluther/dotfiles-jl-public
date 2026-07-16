@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# wake — send a Wake-on-LAN magic packet to a host by name (or raw MAC).
+#
+# Usage:
+#   wake <host>             # look up MAC in the host map, send magic packet
+#   wake <aa:bb:cc:dd:ee:ff># send directly to a MAC
+#   wake -b <bcast> <host>  # override broadcast (default: the host's, else 255.255.255.255)
+#
+# Host map: ~/.config/wake/hosts — whitespace-separated lines of:
+#     name   mac                 [broadcast]
+#     lucy   aa:bb:cc:dd:ee:ff   192.168.1.255
+# Lines starting with # are ignored.
+#
+# Note: the target must have WoL armed (`ethtool -s <nic> wol g`) AND enabled in
+# its BIOS/UEFI ("Power On By PCI-E", disable ErP/Deep Sleep), and the sender
+# must share the host's broadcast domain (same LAN segment).
+set -euo pipefail
+
+declare -A MAC BCAST
+
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/wake/hosts"
+if [ -f "$conf" ]; then
+  while read -r n m b _; do
+    [ -z "${n:-}" ] && continue
+    case "$n" in \#*) continue ;; esac
+    MAC[$n]="$m"
+    [ -n "${b:-}" ] && BCAST[$n]="$b"
+  done <"$conf"
+fi
+
+bcast_override=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -b | --broadcast)
+      bcast_override="$2"
+      shift 2
+      ;;
+    -h | --help)
+      sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "wake: unknown option $1" >&2
+      exit 2
+      ;;
+    *) break ;;
+  esac
+done
+[ $# -ge 1 ] || {
+  echo "usage: wake <host|mac> [-b broadcast]" >&2
+  exit 2
+}
+
+target="$1"
+if [[ "$target" =~ ^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$ ]]; then
+  mac="$target"
+  bcast="${bcast_override:-255.255.255.255}"
+else
+  mac="${MAC[$target]:-}"
+  [ -n "$mac" ] || {
+    echo "wake: unknown host '$target' — add it to $conf" >&2
+    exit 1
+  }
+  bcast="${bcast_override:-${BCAST[$target]:-255.255.255.255}}"
+fi
+
+python3 - "$mac" "$bcast" <<'PY'
+import socket, sys
+mac = sys.argv[1].replace(":", "").replace("-", "")
+pkt = bytes.fromhex("ff" * 6 + mac * 16)
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+for port in (9, 7):
+    s.sendto(pkt, (sys.argv[2], port))
+print(f"wake: magic packet sent to {sys.argv[1]} via {sys.argv[2]}:9,7")
+PY
