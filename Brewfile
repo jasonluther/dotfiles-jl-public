@@ -20,6 +20,7 @@ brew "python@3.13"
 brew "python@3.14"
 brew "railway"
 brew "redis", restart_service: :changed
+brew "keith/formulae/reminders-cli" # `reminders` — Apple Reminders CLI (used by /todo)
 brew "tfenv"
 brew "watch"
 brew "weasyprint"
