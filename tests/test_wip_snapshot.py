@@ -1,7 +1,9 @@
 """Tests for sync-gh.py WIP snapshot engine. Run: pytest -q test_sync_gh.py"""
 
 import importlib.util
+import os
 import subprocess
+import time
 from pathlib import Path
 
 SRC = (
@@ -441,3 +443,124 @@ def test_bundle_wip_worktree_suffixed_ref_no_shared_ref_race(tmp_path):
         "refs/wip/hostx@notes-fix:refs/x",
     )
     assert "wt_wip.txt" in ls_tree_files(check, "refs/x")
+
+
+# ---------- pruning orphaned wip refs / bundles ----------
+#
+# Removing a worktree (typically after its branch merges) or deleting a repo
+# leaves its last wip snapshot behind forever — a ref on origin, or a bundle
+# file Syncthing replicates to every machine. Each host prunes its OWN
+# orphans after a 30-day grace (recovery window for a worktree removed while
+# still carrying unmerged WIP).
+
+
+def push_wip_ref(repo, bare, ref, *, days_old):
+    """Force-push a snapshot commit with a backdated committer date."""
+    date = f"{int(time.time()) - days_old * 86400}"
+    tree = git(repo, "rev-parse", "HEAD^{tree}").stdout.strip()
+    sha = subprocess.run(
+        ["git", "-C", str(repo), "commit-tree", tree, "-m", "old snapshot"],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "GIT_COMMITTER_DATE": date, "GIT_AUTHOR_DATE": date},
+    ).stdout.strip()
+    git(repo, "push", "-q", "origin", f"+{sha}:{ref}")
+
+
+def remote_refs(bare):
+    out = git(bare, "for-each-ref", "--format=%(refname)").stdout
+    return set(out.splitlines())
+
+
+def test_prune_deletes_orphaned_worktree_ref_after_grace(tmp_path):
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    r = init_repo(tmp_path / "r", origin=bare)
+    commit_file(r, "a.txt", "hello")
+    git(r, "push", "-q", "origin", "main")
+    push_wip_ref(r, bare, "refs/heads/wip/hostx@r-gone", days_old=40)
+
+    sg.prune_wip_refs(r, "hostx")
+
+    assert "refs/heads/wip/hostx@r-gone" not in remote_refs(bare)
+
+
+def test_prune_keeps_young_orphan_and_other_hosts(tmp_path):
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    r = init_repo(tmp_path / "r", origin=bare)
+    commit_file(r, "a.txt", "hello")
+    git(r, "push", "-q", "origin", "main")
+    push_wip_ref(r, bare, "refs/heads/wip/hostx@r-young", days_old=5)
+    push_wip_ref(r, bare, "refs/heads/wip/otherhost@r-gone", days_old=40)
+
+    sg.prune_wip_refs(r, "hostx")
+
+    kept = remote_refs(bare)
+    assert "refs/heads/wip/hostx@r-young" in kept  # inside grace window
+    assert "refs/heads/wip/otherhost@r-gone" in kept  # never touch other hosts
+
+
+def test_prune_keeps_ref_for_existing_worktree(tmp_path):
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    r = init_repo(tmp_path / "r", origin=bare)
+    commit_file(r, "a.txt", "hello")
+    git(r, "push", "-q", "origin", "main")
+    wt = tmp_path / "r-live"
+    git(r, "worktree", "add", "-q", "-b", "live", str(wt))
+    push_wip_ref(r, bare, "refs/heads/wip/hostx@r-live", days_old=40)
+
+    sg.prune_wip_refs(r, "hostx")
+
+    assert "refs/heads/wip/hostx@r-live" in remote_refs(bare)
+
+
+def test_prune_throttled_to_daily(tmp_path):
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    r = init_repo(tmp_path / "r", origin=bare)
+    commit_file(r, "a.txt", "hello")
+    git(r, "push", "-q", "origin", "main")
+
+    sg.prune_wip_refs(r, "hostx")  # first run writes the stamp
+    push_wip_ref(r, bare, "refs/heads/wip/hostx@r-gone", days_old=40)
+    sg.prune_wip_refs(r, "hostx")  # within interval — must skip
+    assert "refs/heads/wip/hostx@r-gone" in remote_refs(bare)
+
+    git_dir = Path(git(r, "rev-parse", "--absolute-git-dir").stdout.strip())
+    (git_dir / "wip-prune-hostx.stamp").unlink()
+    sg.prune_wip_refs(r, "hostx")  # stamp gone — prunes
+    assert "refs/heads/wip/hostx@r-gone" not in remote_refs(bare)
+
+
+def test_bundle_prune_deletes_orphan_after_grace(tmp_path):
+    live = init_repo(tmp_path / "root" / "alive")
+    commit_file(live, "a.txt", "x")
+    bundles = tmp_path / "bundles"
+    bundles.mkdir()
+    old = time.time() - 40 * 86400
+    for name in ("root-gone@hostx.bundle", "root-gone@otherhost.bundle"):
+        (bundles / name).write_bytes(b"stub")
+        os.utime(bundles / name, (old, old))
+    (bundles / "root-gone@hostx-young.bundle").write_bytes(b"stub")  # young orphan
+    sg.bundle_wip("alive", live, "hostx", bundles)  # live repo's own bundle
+    live_bundle = bundles / f"{sg.bundle_key(live)}@hostx.bundle"
+    os.utime(live_bundle, (old, old))  # old mtime but repo still exists
+
+    sg.prune_wip_bundles("hostx", [tmp_path / "root"], bundles)
+    names = {p.name for p in bundles.iterdir()}
+
+    assert "root-gone@hostx.bundle" not in names  # orphan past grace: pruned
+    assert "root-gone@otherhost.bundle" in names  # other host: never touched
+    assert "root-gone@hostx-young.bundle" in names  # different host token
+    assert live_bundle.name in names  # repo exists: kept regardless of age
+
+
+def test_bundle_prune_keeps_young_orphan(tmp_path):
+    bundles = tmp_path / "bundles"
+    bundles.mkdir()
+    (bundles / "root-gone@hostx.bundle").write_bytes(b"stub")  # fresh mtime
+    sg.prune_wip_bundles("hostx", [tmp_path / "empty"], bundles)
+    assert (bundles / "root-gone@hostx.bundle").is_file()
