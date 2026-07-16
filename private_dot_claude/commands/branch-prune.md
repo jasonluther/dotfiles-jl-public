@@ -33,9 +33,17 @@ gh pr list --state open --json headRefName --jq '.[].headRefName'           # ne
 
 Also never prune `$base` or a `release`/`production` branch if one exists.
 
+**Never prune `wip/*` refs** (`wip/<host>` and `wip/<host>@<worktree>`). These are the
+fleet-sync WIP-snapshot refs written by `sync-gh.py` — live, continuously force-pushed refs,
+not completed PR heads. `git cherry` will report many of them as `0` outstanding (that host's
+snapshot happens to match `$base` right now), but they are moving targets owned entirely by
+the sync system, which prunes its own stale ones (30-day orphan-pruning). Deleting one just
+makes the daemon recreate it and can race concurrent agent sessions. Treat the whole `wip/*`
+namespace as protected.
+
 ### 2. Classify every remote branch by patch-equivalence
 
-For each `origin/<branch>` other than the protected ones:
+For each `origin/<branch>` other than the protected ones (skip `wip/*` entirely — see above):
 
 ```bash
 git cherry origin/$base origin/<branch> | grep -c '^+'
