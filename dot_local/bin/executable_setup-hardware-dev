@@ -60,6 +60,13 @@ case "$(uname -s)" in
       curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh \
         | BINDIR="$HOME/.local/bin" sh
     fi
+    # Serial-port access: PlatformIO/esptool need the dialout group.
+    if id -nG "$USER" | tr ' ' '\n' | grep -qx dialout; then
+      echo "==> dialout group: already a member"
+    else
+      echo "==> adding $USER to dialout (log out/in for it to take effect)"
+      sudo usermod -aG dialout "$USER"
+    fi
     ;;
   *)
     echo "error: unsupported OS '$(uname -s)'" >&2
