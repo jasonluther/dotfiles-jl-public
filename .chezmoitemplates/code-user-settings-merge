@@ -21,7 +21,11 @@ managed_json="$(cat <<'MANAGED_JSON_EOF'
 MANAGED_JSON_EOF
 )"
 
-if printf '%s' "$local_json" | jq -e . >/dev/null 2>&1; then
+# The explicit non-empty guard matters: with empty input (fresh machine, no
+# local file yet) jq 1.6 (Debian bookworm) exits 0 from `-e` instead of 4,
+# which would send an empty string into --argjson below and fail the apply.
+if [ -n "$local_json" ] \
+   && printf '%s' "$local_json" | jq -e . >/dev/null 2>&1; then
   # `$m * $l` = managed base, local overrides -> local wins, managed seeds gaps.
   jq -n --argjson m "$managed_json" --argjson l "$local_json" '$m * $l'
 else

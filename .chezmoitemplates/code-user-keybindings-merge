@@ -23,7 +23,11 @@ strip_line_comments() { grep -vE '^[[:space:]]*//' || true; }
 managed_arr="$(printf '%s' "$managed_raw" | strip_line_comments)"
 comments="$(printf '%s' "$managed_raw" | grep -E '^[[:space:]]*//' || true)"
 
+# The explicit non-empty guard matters: with empty input (fresh machine, no
+# local file yet) jq 1.6 (Debian bookworm) exits 0 from `-e` instead of 4,
+# which would send an empty string into --argjson below and fail the apply.
 if local_clean="$(printf '%s' "$local_raw" | strip_line_comments)" \
+   && [ -n "$local_clean" ] \
    && printf '%s' "$local_clean" | jq -e 'type=="array"' >/dev/null 2>&1; then
   # local first, then managed entries not already present (array difference).
   merged="$(jq -n --argjson l "$local_clean" --argjson m "$managed_arr" '$l + ($m - $l)')"
