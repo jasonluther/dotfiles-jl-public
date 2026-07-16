@@ -25,3 +25,8 @@ Identity is derived from the source repo. Override with `CHEZMOI_NAME`, `CHEZMOI
 
 `harden-sshd` disables password authentication. Ensure your key is at
 `https://github.com/<gh-user>.keys` before running.
+
+### ⚠️ Nightly auto-updates and reboots
+
+`unattended-upgrades` installs updates from **all** configured apt origins
+nightly and reboots at 04:00 when required — even with users logged in.

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Thin wrapper for scripts/linux/unattended-upgrades.sh.
+#
+# script hash: {{ include "scripts/linux/unattended-upgrades.sh" | sha256sum }}
+
+{{ if eq .chezmoi.os "linux" -}}
+exec {{ joinPath .chezmoi.sourceDir "scripts/linux/unattended-upgrades.sh" | quote }}
+{{- else -}}
+# Linux-only: skipped on {{ .chezmoi.os }}.
+{{- end }}
