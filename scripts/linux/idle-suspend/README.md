@@ -23,11 +23,26 @@ A systemd timer runs a small check script every 5 minutes. The machine is
 
 After `IDLE_CHECKS_REQUIRED` consecutive idle checks (default 6 → 30 minutes)
 it runs `systemctl suspend`. Every decision is logged to the journal.
-`50-idle-suspend.rules` grants `idle-suspend.service` (a root system oneshot
-with no active logind session) permission to call `Suspend()` without an
-interactive polkit prompt — without it every suspend call is silently denied
-(`journalctl -u idle-suspend.service` shows "Call to Suspend failed: Access
-denied" every cycle, forever, even though the idle counter is correct).
+
+`systemctl suspend` fails with the same generic `journalctl -u
+idle-suspend.service` message — "Call to Suspend failed: Access denied" —
+for two unrelated reasons, both handled by `install.sh`:
+
+- **polkit denial**: `idle-suspend.service` is a root system oneshot with no
+  active logind session, and polkit's implicit rule for
+  `org.freedesktop.login1.suspend` requires interactive auth for callers with
+  no session. `50-idle-suspend.rules` grants it unconditionally.
+- **masked sleep targets**: Debian's default install masks
+  `sleep.target`/`suspend.target`/`hibernate.target`/`hybrid-sleep.target`
+  (server images assume a host should never sleep unattended) — `systemctl
+status suspend.target` shows `Loaded: masked` if so. `install.sh` unmasks
+  all four.
+
+Check `busctl call org.freedesktop.login1 /org/freedesktop/login1
+org.freedesktop.login1.Manager CanSuspend` (root) if suspend still fails
+after install — `"no"` with a masked target in `systemctl status
+suspend.target` points at the second cause; consult
+`journalctl -u systemd-logind` for the specific reason logind gave.
 
 `wol-enable.service` asserts `ethtool -s $WOL_NIC wol g` at boot and after
 every resume so the NIC always listens for magic packets.
