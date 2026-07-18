@@ -39,6 +39,14 @@ install -m 644 "$HERE/idle-suspend.service" "$HERE/idle-suspend.timer" \
 install -d -m 755 /etc/polkit-1/rules.d
 install -m 644 "$HERE/50-idle-suspend.rules" /etc/polkit-1/rules.d/
 
+# Debian's default install masks sleep.target/suspend.target/hibernate.target/
+# hybrid-sleep.target (server images assume a host should never sleep
+# unattended) — seen on snoopy dated to its initial provisioning, long before
+# idle-suspend existed to opt back in. A masked suspend.target makes every
+# suspend attempt fail with "Access denied" — the same symptom as the polkit
+# gap above, but a different and unrelated cause; unmask is idempotent.
+systemctl unmask sleep.target suspend.target hibernate.target hybrid-sleep.target
+
 CONF=/etc/idle-suspend.conf
 if [ -e "$CONF" ]; then
   # Refresh from the shipped template, but carry forward every value already
