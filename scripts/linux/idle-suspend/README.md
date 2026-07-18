@@ -23,6 +23,11 @@ A systemd timer runs a small check script every 5 minutes. The machine is
 
 After `IDLE_CHECKS_REQUIRED` consecutive idle checks (default 6 → 30 minutes)
 it runs `systemctl suspend`. Every decision is logged to the journal.
+`50-idle-suspend.rules` grants `idle-suspend.service` (a root system oneshot
+with no active logind session) permission to call `Suspend()` without an
+interactive polkit prompt — without it every suspend call is silently denied
+(`journalctl -u idle-suspend.service` shows "Call to Suspend failed: Access
+denied" every cycle, forever, even though the idle counter is correct).
 
 `wol-enable.service` asserts `ethtool -s $WOL_NIC wol g` at boot and after
 every resume so the NIC always listens for magic packets.
@@ -122,6 +127,7 @@ Work down the chain — each step isolates a layer:
 ```sh
 sudo systemctl disable --now idle-suspend.timer wol-enable.service
 sudo rm /usr/local/sbin/idle-suspend /etc/idle-suspend.conf \
-  /etc/systemd/system/{idle-suspend.service,idle-suspend.timer,wol-enable.service}
+  /etc/systemd/system/{idle-suspend.service,idle-suspend.timer,wol-enable.service} \
+  /etc/polkit-1/rules.d/50-idle-suspend.rules
 sudo systemctl daemon-reload
 ```

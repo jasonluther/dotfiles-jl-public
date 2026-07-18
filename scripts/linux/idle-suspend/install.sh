@@ -33,6 +33,12 @@ install -m 755 "$HERE/idle-suspend" /usr/local/sbin/idle-suspend
 install -m 644 "$HERE/idle-suspend.service" "$HERE/idle-suspend.timer" \
   "$HERE/wol-enable.service" /etc/systemd/system/
 
+# Without this, logind's polkit default (auth_admin_keep for callers with no
+# active session) silently denies every suspend call the timer-triggered
+# service makes — see the rule file's own header for the failure mode.
+install -d -m 755 /etc/polkit-1/rules.d
+install -m 644 "$HERE/50-idle-suspend.rules" /etc/polkit-1/rules.d/
+
 CONF=/etc/idle-suspend.conf
 if [ -e "$CONF" ]; then
   # Refresh from the shipped template, but carry forward every value already

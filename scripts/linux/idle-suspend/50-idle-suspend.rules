@@ -1,0 +1,29 @@
+// Allow idle-suspend.service to call logind's Suspend() without an
+// interactive prompt.
+//
+// idle-suspend.service is a plain system oneshot (no User=, runs as root),
+// spawned by idle-suspend.timer — it has no active logind session/seat, so
+// polkit classifies the caller as "inactive". org.freedesktop.login1.suspend's
+// implicit rule is auth_admin_keep for inactive callers (interactive-only),
+// so without this rule every suspend call is silently denied ("Call to
+// Suspend failed: Access denied" in the journal) and idle-suspend never
+// actually suspends the box, no matter how correctly it counts idle checks.
+// suspend-multiple-sessions is granted too since the GDM greeter session is
+// always present alongside any logged-in user session, which routes the
+// call through that action instead of plain suspend.
+//
+// Scope: grants ONLY the two suspend actions, only to root (the service's
+// own UID) — no other logind actions, no escalation.
+// Installed to /etc/polkit-1/rules.d/ by install.sh (idempotent); polkitd
+// watches rules.d and reloads automatically.
+// Owner-confirmed 2026-07-18 (snoopy: 6+ consecutive "Access denied" cycles
+// over ~35 min, idle-suspend never once actually suspending).
+polkit.addRule(function (action, subject) {
+  if (
+    (action.id == "org.freedesktop.login1.suspend" ||
+      action.id == "org.freedesktop.login1.suspend-multiple-sessions") &&
+    subject.user == "root"
+  ) {
+    return polkit.Result.YES;
+  }
+});
