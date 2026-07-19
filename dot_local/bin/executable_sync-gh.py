@@ -551,8 +551,22 @@ def parse_args():
 
 
 def sanitized_hostname():
-    """Hostname suitable for use as a git ref component."""
-    raw = socket.gethostname().split(".")[0]
+    """Hostname suitable for use as a git ref component.
+
+    Prefers macOS's LocalHostName (stable, user-assigned) over
+    socket.gethostname(), which follows DHCP/mDNS renames and can silently
+    flip to "Mac" on some networks — forking a phantom host identity.
+    """
+    try:
+        raw = subprocess.run(
+            ["scutil", "--get", "LocalHostName"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except OSError:
+        raw = ""
+    if not raw:
+        raw = socket.gethostname().split(".")[0]
     safe = _BRANCH_SAFE.sub("-", raw).strip("-.")
     return safe or "unknown-host"
 

@@ -34,7 +34,16 @@ _KEY_SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 def sanitized_hostname():
     """Hostname as a git-ref-safe token — must match sync-gh.py."""
-    raw = socket.gethostname().split(".")[0]
+    try:
+        raw = subprocess.run(
+            ["scutil", "--get", "LocalHostName"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except OSError:
+        raw = ""
+    if not raw:
+        raw = socket.gethostname().split(".")[0]
     return _BRANCH_SAFE.sub("-", raw).strip("-.") or "unknown-host"
 
 
