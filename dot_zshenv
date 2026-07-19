@@ -1,0 +1,36 @@
+# ~/.zshenv — read by EVERY zsh, including the non-interactive, non-login
+# shells that `ssh host 'cmd'`, cron, and scripts run in. The SSH server hands
+# those a bare PATH (/usr/bin:/bin:/usr/sbin:/sbin on macOS), so `python3`
+# resolves to system 3.9, `gh`/`docker`/`wake` aren't found, and anything
+# assuming a real dev PATH silently misbehaves. Login shells layer .zprofile's
+# full brew/pyenv/orbstack init on top of this; this file only guarantees the
+# essential tool dirs are present for the bare case.
+#
+# Kept deliberately lightweight — no `eval "$(brew shellenv)"` or `pyenv init`
+# here (they belong in .zprofile): this runs for every subshell, so it must
+# stay cheap and side-effect-free beyond PATH.
+
+# Dedup: `path` is tied to PATH, and -U keeps it unique so re-entry across
+# nested shells can't grow it unboundedly.
+typeset -U path
+
+# pyenv shims resolve `python3`/`python3.14` the same way the interactive shell
+# does. The shims re-exec through pyenv, so it needs PYENV_ROOT to find itself.
+if [[ -d $HOME/.pyenv/shims ]]; then
+  export PYENV_ROOT="$HOME/.pyenv"
+  path=($HOME/.pyenv/shims $path)
+fi
+
+# Homebrew (Apple Silicon then Intel): the fallback python3, plus git/gh/etc.
+for _brew in /opt/homebrew /usr/local; do
+  if [[ -x $_brew/bin/brew ]]; then
+    path=($_brew/bin $_brew/sbin $path)
+    break
+  fi
+done
+unset _brew
+
+# Per-user bin: the `wake` binary (fleet WoL), claude, npm-global tools.
+[[ -d $HOME/.local/bin ]] && path=($HOME/.local/bin $path)
+
+export PATH
