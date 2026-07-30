@@ -67,7 +67,7 @@ def die(msg: str, code: int = 1):
 def detect_main() -> str:
     for ref in ("origin/main", "origin/master", "main", "master"):
         rc = subprocess.run(
-            ["git", "rev-parse", "--verify", ref], capture_output=True
+            ["git", "rev-parse", "--verify", ref], capture_output=True, check=False
         ).returncode
         if rc == 0:
             return ref.removeprefix("origin/")
@@ -100,7 +100,7 @@ def list_worktrees() -> list[dict]:
             cur = {"path": line[len("worktree ") :]}
         elif line.startswith("branch "):
             cur["branch"] = line[len("branch ") :].removeprefix("refs/heads/")
-        elif line.startswith("bare") or line.startswith("detached"):
+        elif line.startswith(("bare", "detached")):
             cur.pop("branch", None)
     if cur.get("path") and cur.get("branch"):
         worktrees.append(cur)
@@ -137,6 +137,7 @@ def has_upstream() -> bool:
     rc = subprocess.run(
         ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
         capture_output=True,
+        check=False,
     ).returncode
     return rc == 0
 
@@ -171,6 +172,7 @@ def gh_pr_view() -> dict | None:
         ["gh", "pr", "view", "--json", "number,url,state,mergeable"],
         capture_output=True,
         text=True,
+        check=False,
     )
     if r.returncode != 0:
         return None
@@ -343,7 +345,9 @@ def request_reviewers(num: int, reviewers: list[str]):
 
 def merge_pr(num: int):
     print(f"{DIM}Merging PR #{num} (rebase)...{RESET}")
-    r = subprocess.run(["gh", "pr", "merge", str(num), "--rebase", "--delete-branch"])
+    r = subprocess.run(
+        ["gh", "pr", "merge", str(num), "--rebase", "--delete-branch"], check=False
+    )
     if r.returncode == 0:
         print(f"{GREEN}Merged ✓{RESET}")
         return
@@ -352,7 +356,7 @@ def merge_pr(num: int):
         f"(branch likely checked out in a worktree){RESET}",
         file=sys.stderr,
     )
-    r2 = subprocess.run(["gh", "pr", "merge", str(num), "--rebase"])
+    r2 = subprocess.run(["gh", "pr", "merge", str(num), "--rebase"], check=False)
     if r2.returncode != 0:
         die("merge failed")
     print(f"{GREEN}Merged ✓{RESET} (clean up branch/worktree manually)")

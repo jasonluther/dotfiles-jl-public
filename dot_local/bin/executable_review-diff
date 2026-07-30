@@ -32,6 +32,7 @@ def find_main_branch() -> str:
         rc = subprocess.run(
             ["git", "rev-parse", "--verify", f"refs/heads/{name}"],
             capture_output=True,
+            check=False,
         ).returncode
         if rc == 0:
             return name
@@ -99,9 +100,7 @@ def _has_uncommitted_changes() -> bool:
     """Check if there are staged, unstaged, or untracked changes."""
     if run(["git", "diff", "--name-only", "HEAD"], check=False):
         return True
-    if run(["git", "ls-files", "--others", "--exclude-standard"], check=False):
-        return True
-    return False
+    return bool(run(["git", "ls-files", "--others", "--exclude-standard"], check=False))
 
 
 def _uncommitted(args: argparse.Namespace) -> None:

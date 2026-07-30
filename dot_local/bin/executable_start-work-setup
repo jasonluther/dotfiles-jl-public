@@ -14,7 +14,7 @@ def die(msg: str) -> None:
 
 
 def git(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], capture_output=True, text=True)
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=False)
 
 
 def repo_root() -> Path:
@@ -33,7 +33,7 @@ def open_in_vscode(worktree: Path) -> None:
     code = shutil.which("code")
     if not code:
         return
-    subprocess.run([code, str(worktree)])
+    subprocess.run([code, str(worktree)], check=False)
 
 
 def main() -> None:
@@ -58,7 +58,7 @@ def main() -> None:
         local_setup = worktree / ".start-work.sh"
         if local_setup.is_file():
             print(f"Running {local_setup.name}")
-            subprocess.run(["bash", str(local_setup)], cwd=worktree)
+            subprocess.run(["bash", str(local_setup)], cwd=worktree, check=False)
 
     # Derive session name: include PORT from .env if available
     session_name = branch
@@ -76,7 +76,7 @@ def main() -> None:
     claude_cmd = ["claude", "--name", session_name]
     if prompt:
         claude_cmd.append(prompt)
-    subprocess.run(claude_cmd, cwd=worktree)
+    subprocess.run(claude_cmd, cwd=worktree, check=False)
 
 
 if __name__ == "__main__":

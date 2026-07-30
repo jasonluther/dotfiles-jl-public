@@ -19,7 +19,7 @@ TRUNK_BRANCHES = {"main", "master"}
 
 
 def run(cmd: list[str]) -> str:
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     return result.stdout.strip()
 
 
@@ -90,6 +90,7 @@ def main() -> None:
     result = subprocess.run(
         ["git", "-C", main_worktree, "check-ignore", "-q", rel],
         capture_output=True,
+        check=False,
     )
     if result.returncode == 0:
         return

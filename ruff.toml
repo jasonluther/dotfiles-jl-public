@@ -1,0 +1,9 @@
+# Ruff config for this repo's shebang Python scripts (dot_local/bin/*,
+# private_dot_claude/hooks/*). CI runs an unpinned `uvx ruff`, so this file
+# also keeps local pre-commit and CI on the same rules.
+
+[lint]
+# EXE001 ("shebang is present but file is not executable") is wrong here:
+# these are chezmoi *source* files. The exec bit comes from the
+# `executable_` name prefix at `chezmoi apply` time, not from the mode in git.
+ignore = ["EXE001"]

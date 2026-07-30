@@ -29,7 +29,7 @@ def which(*names: str) -> str | None:
 
 def run(cmd: list[str]) -> None:
     try:
-        subprocess.run(cmd, capture_output=True, timeout=TIMEOUT)
+        subprocess.run(cmd, capture_output=True, timeout=TIMEOUT, check=False)
     except (subprocess.SubprocessError, OSError):
         pass
 

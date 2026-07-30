@@ -39,6 +39,7 @@ def sanitized_hostname():
             ["scutil", "--get", "LocalHostName"],
             capture_output=True,
             text=True,
+            check=False,
         ).stdout.strip()
     except OSError:
         raw = ""
@@ -155,7 +156,7 @@ def resolve_host(this_host, host):
 
 def cmd_diff(this_host, host):
     rev = resolve_host(this_host, host)
-    return subprocess.run(["git", "diff", "HEAD", rev]).returncode
+    return subprocess.run(["git", "diff", "HEAD", rev], check=False).returncode
 
 
 def cmd_apply(this_host, host, force):
@@ -176,6 +177,7 @@ def cmd_apply(this_host, host, force):
         input=patch,
         text=True,
         capture_output=True,
+        check=False,
     )
     sys.stderr.write(proc.stderr)
     if proc.returncode == 0:
