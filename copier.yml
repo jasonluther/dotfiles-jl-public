@@ -49,9 +49,3 @@ license:
     - MIT
     - Apache-2.0
   default: MIT
-
-year:
-  type: str
-  help: Copyright year (auto)
-  default: "{{ '%Y' | strftime }}"
-  when: false
