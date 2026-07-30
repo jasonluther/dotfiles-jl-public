@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Create a git worktree + branch, run repo-specific setup, and launch Claude Code."""
 
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +22,18 @@ def repo_root() -> Path:
     if r.returncode != 0:
         die("Not in a git repository")
     return Path(r.stdout.strip())
+
+
+def open_in_vscode(worktree: Path) -> None:
+    """Open the worktree in VS Code, but only on a local Mac that has `code`."""
+    if sys.platform != "darwin":
+        return
+    if any(os.environ.get(v) for v in ("SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY")):
+        return
+    code = shutil.which("code")
+    if not code:
+        return
+    subprocess.run([code, str(worktree)])
 
 
 def main() -> None:
@@ -55,6 +69,8 @@ def main() -> None:
                 port = line.split("=", 1)[1].strip("'\"")
                 session_name = f"{branch}:{port}"
                 break
+
+    open_in_vscode(worktree)
 
     # Launch Claude Code
     claude_cmd = ["claude", "--name", session_name]
