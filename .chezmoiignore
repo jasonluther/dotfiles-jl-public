@@ -9,6 +9,7 @@ mas.txt
 README.md
 install.sh
 copier.yml
+ruff.toml
 docs/
 templates/
 tests/
