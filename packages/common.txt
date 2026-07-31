@@ -21,6 +21,7 @@ markdownlint-cli
 miller
 nmap
 node
+ollama
 pandoc
 pipx
 pre-commit
