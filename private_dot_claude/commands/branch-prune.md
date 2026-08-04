@@ -37,7 +37,7 @@ Also never prune `$base` or a `release`/`production` branch if one exists.
 fleet-sync WIP-snapshot refs written by `sync-gh.py` — live, continuously force-pushed refs,
 not completed PR heads. `git cherry` will report many of them as `0` outstanding (that host's
 snapshot happens to match `$base` right now), but they are moving targets owned entirely by
-the sync system, which prunes its own stale ones (30-day orphan-pruning). Deleting one just
+the sync system, which prunes its own stale ones (10-day orphan-pruning). Deleting one just
 makes the daemon recreate it and can race concurrent agent sessions. Treat the whole `wip/*`
 namespace as protected.
 

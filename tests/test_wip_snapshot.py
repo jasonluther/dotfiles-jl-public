@@ -450,8 +450,8 @@ def test_bundle_wip_worktree_suffixed_ref_no_shared_ref_race(tmp_path):
 # Removing a worktree (typically after its branch merges) or deleting a repo
 # leaves its last wip snapshot behind forever — a ref on origin, or a bundle
 # file Syncthing replicates to every machine. Each host prunes its OWN
-# orphans after a 30-day grace (recovery window for a worktree removed while
-# still carrying unmerged WIP).
+# orphans after a grace period (WIP_PRUNE_GRACE_DAYS — recovery window for a
+# worktree removed while still carrying unmerged WIP).
 
 
 def push_wip_ref(repo, bare, ref, *, days_old):
