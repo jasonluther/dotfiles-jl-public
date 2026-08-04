@@ -229,7 +229,7 @@ def wip_ref_suffix(dest):
 # Orphaned wip snapshots (worktree removed after merging, repo deleted) are
 # kept this long before pruning — a recovery window in case a checkout was
 # removed while still carrying unmerged WIP.
-WIP_PRUNE_GRACE_DAYS = 30
+WIP_PRUNE_GRACE_DAYS = 10
 WIP_PRUNE_INTERVAL = 86400  # prune at most daily; the sweep runs every 5 min
 
 
