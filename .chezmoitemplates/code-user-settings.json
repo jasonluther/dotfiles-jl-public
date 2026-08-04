@@ -152,5 +152,6 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "remote.autoForwardPortsSource": "hybrid",
-  "search.ripgrepPath": "{{ if eq .chezmoi.os "darwin" }}{{ output "brew" "--prefix" | trim }}/bin/rg{{ else }}{{ lookPath "rg" }}{{ end }}"
+  "search.ripgrepPath": "{{ if eq .chezmoi.os "darwin" }}{{ output "brew" "--prefix" | trim }}/bin/rg{{ else }}{{ lookPath "rg" }}{{ end }}",
+  "todo-tree.ripgrep": "{{ if eq .chezmoi.os "darwin" }}{{ output "brew" "--prefix" | trim }}/bin/rg{{ else }}{{ lookPath "rg" }}{{ end }}"
 }
