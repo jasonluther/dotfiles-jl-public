@@ -150,6 +150,28 @@
           }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x \"$HOME/.local/bin/standup\" ] && \"$HOME/.local/bin/standup\" subagent-start || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x \"$HOME/.local/bin/standup\" ] && \"$HOME/.local/bin/standup\" subagent-stop || true",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
