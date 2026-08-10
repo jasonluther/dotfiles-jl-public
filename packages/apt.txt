@@ -21,6 +21,12 @@ build-essential
 # get filtered out as no-candidate). macOS installs Chrome out of band.
 google-chrome-stable
 
+# Syscall tracer, for diagnosing wedged processes on the self-hosted CI
+# runners — a hung browser driver shows a blocked syscall vs a spin, which
+# `py-spy` alone can't distinguish. Linux-only by nature: macOS ships dtruss,
+# which SIP blocks against most binaries, so there's no common.txt equivalent.
+strace
+
 # Login shell — dot_zshrc/dot_zprofile are useless without it. macOS ships
 # zsh by default, but Debian/Ubuntu defaults to bash. The chsh-to-zsh
 # chezmoi script switches the login shell after install.
