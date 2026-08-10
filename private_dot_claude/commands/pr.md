@@ -41,7 +41,11 @@ automatically — ask the user for guidance.
 conversation. The rebase in step 2 may have changed the diff, and pre-commit fixes in
 step 5 may require a re-review.
 
-Run `/code-review` (no arguments — it defaults to reviewing the current branch vs main).
+Run `/code-review <level>` with an effort level sized to the diff — `low`/`medium` for a
+focused single-concern change, `high`/`max` when it is multi-file, adds a capability, or
+touches auth, persistence, concurrency, or live state. Pass the level explicitly: with no
+argument the review reuses whatever level was typed last, even from another session.
+(`ultra` is the billed cloud pass — owner-triggered only, never launch it unasked.)
 Fix any real issues it finds. If fixes are made, commit them with an appropriate message.
 
 ### 4. Update documentation
