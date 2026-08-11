@@ -76,7 +76,10 @@ source repo afterward.
   it overwrites the template body with the rendered literal and destroys the `{{ }}`.
   Edit the `.tmpl` by hand, then `chezmoi apply`.
 - **A format-on-edit hook reformats markdown** (e.g. this file) on every edit — keep
-  content formatter-stable (hence the `·` space placeholders in the table above).
+  content formatter-stable (hence the `·` space placeholders in the table above). The
+  hook **refuses to format** when git conflict markers are present; prettier on
+  Markdown otherwise rewrites `>>>>>>>` into nested blockquotes and destroys the
+  conflict.
 
 ## Important
 
