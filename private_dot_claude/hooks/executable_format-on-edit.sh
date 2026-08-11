@@ -45,6 +45,55 @@ def which(*names: str) -> str | None:
     return None
 
 
+def which_node_tool(path: str, name: str) -> str | None:
+    """Resolve an npm-provided formatter against the PROJECT, not just PATH.
+
+    npm tools are pinned per project (``package.json`` + ``node_modules``),
+    and a global install drifts from that pin on its own schedule. For
+    prettier that drift is destructive rather than cosmetic: a stale global
+    rewrites Markdown the pinned version leaves alone, turning underscores
+    inside identifiers into emphasis (``end_condition`` -> ``end*condition``)
+    hundreds of lines away from the edit. Pre-commit runs the *pinned*
+    binary, so it re-formats the damage as legitimate content and the commit
+    passes — only reading the diff catches it.
+
+    Resolution order, most trustworthy first:
+
+    1. the nearest ``node_modules/.bin/<name>`` above the edited file — the
+       exact version the project pins, which is what pre-commit will use;
+    2. nothing, when a ``package.json`` above the file declares the tool but
+       its ``node_modules`` is absent (a fresh worktree that has not run
+       ``npm ci``). Formatting is skipped deliberately: leaving the file
+       untouched for the pinned pre-commit run is strictly safer than
+       letting a mismatched global rewrite it;
+    3. PATH, for files outside any project that pins the tool.
+    """
+    resolved = Path(path).resolve()
+    parents = [resolved.parent, *resolved.parent.parents]
+
+    for parent in parents:
+        candidate = parent / "node_modules" / ".bin" / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+
+    for parent in parents:
+        package_json = parent / "package.json"
+        if not package_json.exists():
+            continue
+        try:
+            manifest = json.loads(package_json.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        pinned = {
+            *manifest.get("dependencies", {}),
+            *manifest.get("devDependencies", {}),
+        }
+        # The nearest manifest decides: an outer one cannot un-pin it.
+        return None if name in pinned else shutil.which(name)
+
+    return shutil.which(name)
+
+
 def has_conflict_markers(path: str) -> bool:
     """True when ``path`` contains git conflict markers.
 
@@ -104,16 +153,19 @@ def format_python(path: str) -> None:
 
 
 def format_markdown(path: str) -> None:
-    if prettier := which("prettier"):
+    if prettier := which_node_tool(path, "prettier"):
         run([prettier, "--write", "--log-level", "silent", path])
-    elif mdformat := which("mdformat"):
+    elif not which("prettier") and (mdformat := which("mdformat")):
+        # Only when this machine has no prettier at all. A deliberate skip
+        # (project pins prettier, node_modules absent) must NOT fall through
+        # to a different formatter with a different house style.
         run([mdformat, path])
-    if mdlint := which("markdownlint"):
+    if mdlint := which_node_tool(path, "markdownlint"):
         run([mdlint, "--fix", path])
 
 
 def format_with_prettier(path: str) -> None:
-    if prettier := which("prettier"):
+    if prettier := which_node_tool(path, "prettier"):
         run([prettier, "--write", "--log-level", "silent", path])
 
 
