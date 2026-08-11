@@ -11,3 +11,11 @@
 # option: zle" at every interactive zsh startup on machines that already
 # had it deployed.
 .config/shell/fzf.sh
+
+# Custom /code-review retired in 1f8865d (feat(claude): retire the custom
+# /code-review, use the built-in). A user-level command SHADOWS the built-in
+# of the same name, so an orphan here is not inert: the built-in's effort
+# levels stop working, and `/code-review low` dies with an unknown-revision
+# error because the old command passed its whole argument to `review-diff`,
+# which takes a branch or --since and reads "low" as a branch name.
+.claude/commands/code-review.md
