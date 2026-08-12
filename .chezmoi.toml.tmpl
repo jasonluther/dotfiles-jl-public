@@ -3,16 +3,15 @@
 
     1. $CHEZMOI_NAME / $CHEZMOI_EMAIL env vars
        For unattended installs (cloud-init, ssh-piped scripts, CI).
-    2. `git config --global user.name|user.email` if already set
-       For machines that already have a personal git identity.
-    3. `git log -1 --format=%an|%ae` of the cloned chezmoi source
-       Zero-config default — uses the most recent commit author of THIS
-       clone. For the repo owner that's themself; for a fresh fork it's
-       whoever committed last. After the forker pushes their own commit
-       to their fork, subsequent re-runs pick up their identity.
+       Not filtered — CI may intentionally set ci / ci@example.com.
+    2. `git config --global user.name|user.email` if already set to a
+       non-poisoned identity. Skips name=ci / email=ci@example.com and
+       GitHub noreply bot authors left behind by self-hosted CI fallout.
+    3. First non-poisoned `git log` author of the cloned chezmoi source.
+       Walks past CI/bot tip commits instead of taking `git log -1` blindly.
 
   install.sh ensures system git is on PATH before `chezmoi init` runs,
-  so step 3 always has git available; the lookPath guard is belt-and-
+  so steps 2–3 always have git available; the lookPath guard is belt-and-
   braces for someone running chezmoi init by hand on a stripped box.
 
   Non-TTY override:
@@ -24,21 +23,29 @@
 
 {{- $name := env "CHEZMOI_NAME" -}}
 {{- if and (eq $name "") (lookPath "git") -}}
-{{-   $name = output "git" "config" "--global" "--default" "" "user.name" | trim -}}
+{{-   $candidate := output "git" "config" "--global" "--default" "" "user.name" | trim -}}
+{{-   if ne $candidate "ci" -}}{{- $name = $candidate -}}{{- end -}}
 {{- end -}}
-{{- if and (eq $name "") (lookPath "git") -}}
-{{-   $name = output "git" "-C" $src "log" "-1" "--format=%an" | trim -}}
-{{- end -}}
-{{- if eq $name "" -}}{{- fail "no name available — set CHEZMOI_NAME, run `git config --global user.name '<your name>'`, or commit to the source repo so its git log has an author" -}}{{- end -}}
 
 {{- $email := env "CHEZMOI_EMAIL" -}}
 {{- if and (eq $email "") (lookPath "git") -}}
-{{-   $email = output "git" "config" "--global" "--default" "" "user.email" | trim -}}
+{{-   $candidate := output "git" "config" "--global" "--default" "" "user.email" | trim -}}
+{{-   if and (ne $candidate "ci@example.com") (not (hasSuffix $candidate "@users.noreply.github.com")) -}}
+{{-     $email = $candidate -}}
+{{-   end -}}
 {{- end -}}
-{{- if and (eq $email "") (lookPath "git") -}}
-{{-   $email = output "git" "-C" $src "log" "-1" "--format=%ae" | trim -}}
+
+{{- if and (or (eq $name "") (eq $email "")) (lookPath "git") -}}
+{{-   $pair := output "bash" "-c" "git -C \"$0\" log --format='%an\t%ae' | while IFS=$(printf '\\t') read -r n e; do case \"$n\" in ''|ci) continue;; esac; case \"$e\" in ''|ci@example.com|*@users.noreply.github.com) continue;; esac; printf '%s\t%s\\n' \"$n\" \"$e\"; exit 0; done" $src | trim -}}
+{{-   if ne $pair "" -}}
+{{-     $parts := $pair | splitList "\t" -}}
+{{-     if eq $name "" -}}{{- $name = index $parts 0 -}}{{- end -}}
+{{-     if eq $email "" -}}{{- $email = index $parts 1 -}}{{- end -}}
+{{-   end -}}
 {{- end -}}
-{{- if eq $email "" -}}{{- fail "no email available — set CHEZMOI_EMAIL, run `git config --global user.email '<you@example.com>'`, or commit to the source repo so its git log has an author" -}}{{- end -}}
+
+{{- if eq $name "" -}}{{- fail "no name available — set CHEZMOI_NAME, run `git config --global user.name '<your name>'`, or commit to the source repo so its git log has a non-CI author" -}}{{- end -}}
+{{- if eq $email "" -}}{{- fail "no email available — set CHEZMOI_EMAIL, run `git config --global user.email '<you@example.com>'`, or commit to the source repo so its git log has a non-CI author" -}}{{- end -}}
 
 [data]
     name = {{ $name | quote }}
