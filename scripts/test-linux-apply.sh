@@ -121,6 +121,8 @@ check() {
 
 echo "==> assertions"
 check "~/.gitconfig exists"                      test -f "$HOME/.gitconfig"
+check "git user.name from CHEZMOI_NAME"          [ "$(git config --global --get user.name)" = "Smoke Test" ]
+check "git user.email from CHEZMOI_EMAIL"        [ "$(git config --global --get user.email)" = "smoke@test.local" ]
 check "~/.zshrc exists"                          test -f "$HOME/.zshrc"
 check "~/.local/bin/start-work-setup exists"     test -f "$HOME/.local/bin/start-work-setup"
 check "~/.local/bin/start-work-setup executable" test -x "$HOME/.local/bin/start-work-setup"

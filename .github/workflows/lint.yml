@@ -80,20 +80,10 @@ jobs:
         env:
           CHEZMOI_NAME: ci
           CHEZMOI_EMAIL: ci@example.com
-        run: |
-          chezmoi init --source="$GITHUB_WORKSPACE"
-          shopt -s nullglob
-          files=(.chezmoiscripts/*.tmpl)
-          [ ${#files[@]} -eq 0 ] && { echo "no .chezmoiscripts templates"; exit 0; }
-          fail=0
-          for f in "${files[@]}"; do
-            echo "==> $f"
-            if ! chezmoi execute-template <"$f" | bash -n /dev/stdin; then
-              echo "FAIL: $f"
-              fail=1
-            fi
-          done
-          exit "$fail"
+        # Isolated temp HOME — a bare `chezmoi init` would overwrite the
+        # self-hosted runner operator's ~/.config/chezmoi/chezmoi.toml and
+        # poison git identity on the next `chezmoi update --force`.
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/chezmoi-template-syntax.sh"
 
       - name: zsh -n (parser-only)
         run: |
