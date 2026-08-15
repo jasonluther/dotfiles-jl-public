@@ -43,6 +43,8 @@
       "Bash(pytest:*)",
       "Bash(python:*)",
       "Bash(python3:*)",
+      "Bash(railway logs:*)",
+      "Bash(railway status:*)",
       "Bash(review-diff:*)",
       "Bash(ruff:*)",
       "Bash(sqlite3:*)",
@@ -198,5 +200,6 @@
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true{{- $automodePath := joinPath .chezmoi.homeDir ".claude/automode-partygame.json" }}{{- if stat $automodePath }},
+  "autoMode": {{ include $automodePath }}{{- end }}
 }
