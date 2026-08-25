@@ -7,7 +7,9 @@ Delete remote branches — and local worktrees/branches — whose commits are **
 default branch**, using patch-equivalence rather than ancestry. This is rebase-safe: with
 rebase or squash merging, a merged branch keeps showing commits in
 `git rev-list main..branch` because the merge rewrote its SHAs — so "ahead" counts lie.
-`git cherry` compares patches instead and correctly reports merged work.
+`git cherry` compares patches instead and correctly reports work that landed as the **same
+patch**. It cannot see work that landed **re-authored** — see step 2a before trusting a
+`+`.
 
 ## Arguments
 
@@ -51,15 +53,69 @@ git cherry origin/$base origin/<branch> | grep -c '^+'
 ```
 
 - `0` outstanding (`+`) commits → **fully merged**, safe to delete.
-- `>0` → has genuinely unmerged work → **keep**.
+- `>0` → no identical patch on `$base` → **keep** (a hypothesis, not a verdict — step 2a).
 
 Build two lists: PRUNE (count 0, no open PR, not protected) and KEEP (everything else,
 with the reason: open PR #, unmerged commit count, or protected).
 
+### 2a. Verify the KEEP list for re-authored work (staleness-triggered)
+
+`git cherry` compares **patch IDs**, so it only recognizes work that landed as the *same
+patch*. Work that landed **re-authored** — a later PR that rewrote the same idea from
+scratch — reports `+` forever and is never reclaimed. The asymmetry is the whole point:
+
+- `-` is a **verdict**: that patch really is on `$base`. Safe to delete.
+- `+` is a **hypothesis**: "no identical patch found" — *not* "this work is missing".
+
+So the PRUNE test above stays exactly as written (its `-` is sound). The verification goes
+on the KEEP list.
+
+For each KEEP branch with **no open PR** whose last commit is **older than 7 days**
+(`git log -1 --format=%cr <ref>`), do not stop at "N outstanding commits":
+
+1. List what the branch touched:
+   `git diff --name-only $(git merge-base origin/$base <ref>) <ref>`
+2. Pull 2-4 **distinctive identifiers** from that diff — a new test function name, a new
+   symbol, a docstring heading, a unique sentence of prose.
+3. Grep `$base`'s **current content** for each:
+   `git show origin/$base:<path> | grep -n '<identifier>'`
+   (use `git grep <identifier> origin/$base` if the file may have been renamed).
+
+If every identifier is already on `$base`, report it as
+**`KEEP-SUSPECT: possibly re-authored onto $base — verify content before reviving`**, with
+the identifiers and where each was found. If any is missing, it stays a plain KEEP.
+
+Why 7 days: long enough that an actively-developed branch is never flagged, short enough to
+catch one a later PR overtook. It is a **tripwire for a human read, not a deletion
+criterion** — nothing keys off the exact number, so tune it freely.
+
+**KEEP-SUSPECT never deletes.** `--apply` acts on the PRUNE list only; suspicion alone must
+never delete anything. A false positive here would destroy the only copy of unmerged work,
+so a human reads the evidence and deletes by hand.
+
+**Trap: `git diff` will not answer this.** On a branch many days behind, `git diff
+origin/$base HEAD` shows the *base branch's* entire divergence (~57KB of unrelated CI and
+`CLAUDE.md` churn in the case below) — useless. Three-dot `git diff origin/$base...HEAD` is
+**also** misleading: it showed a docstring block as a pure addition even though `$base`
+already had that content, because both sides edited that region after the merge-base. Only
+comparing the **named files' current content** on the two sides answers the question.
+
+**Worked example (branch dated 2026-08-13, checked 2026-08-25).**
+`chore/component-registration-completeness-guard` in `partygame`: 3 commits, clean worktree,
+no PR ever opened, all 3 reported `+`. Every contribution was already on `main` in a
+further-developed form — the `registry.py` seven-module checklist (with richer guard
+annotations), the `components.md` deferral entry (as the 4th "Known data-driven boundary"),
+and the completeness-guard **test module** (landed as `937d64e26`, carrying one *extra*
+test the branch lacked — `test_projector_chain_precedence_holds`). Merging the
+branch would have been a **regression**: strictly fewer tests than `main` already had. It
+was deleted after checking the content by hand.
+
 ### 3. Report
 
 Always print both lists with counts: how many will be deleted, and the kept branches with
-their reason. This makes silent over-deletion impossible to miss.
+their reason (flagging any KEEP-SUSPECT with its evidence). This makes silent
+over-deletion impossible to miss, and stops a re-authored branch from sitting in KEEP
+forever with no explanation.
 
 ### 4. Delete (only with `--apply`)
 
@@ -97,6 +153,11 @@ with no `-<feature>` suffix — never touch that one, see
    `git merge-base --is-ancestor <sha> origin/$base` (cheap ancestor check); if that's
    false, fall back to `git cherry origin/$base <sha>`. `0` outstanding → **MERGED**,
    safe to remove. `>0` → **KEEP: N outstanding commits**.
+4. **Re-authored check.** A `+` here is the same hypothesis as in step 2. If the branch has
+   no open PR and its last commit is older than 7 days, run the step 2a content check and
+   report **KEEP-SUSPECT** instead of a bare commit count. Still never removed by
+   `--apply` — the worked example in step 2a was exactly this shape: a stale local branch,
+   no PR, three `+` commits, all of it already on `main`.
 
 Note two worktrees can point at the same branch/SHA (one checked out on the branch, one
 left detached at the same commit after a stale checkout) — dedupe branch names before the
@@ -105,7 +166,8 @@ delete step so `git branch -D` isn't run twice on the same name.
 ### 6. Report local worktrees
 
 Print REMOVE (path, branch or `(detached)`, "merged") and KEEP (path, reason: dirty / open
-PR # / N outstanding commits) lists with counts, same as the remote-branch report.
+PR # / N outstanding commits / KEEP-SUSPECT + evidence) lists with counts, same as the
+remote-branch report.
 
 ### 7. Delete local worktrees + branches (only with `--apply`)
 
