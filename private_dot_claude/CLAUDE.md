@@ -9,8 +9,10 @@ precedence over anything here.
   branch that already landed still shows commits in `git rev-list main..branch` and keeps a
   stale worktree/branch around. Before redoing work, assuming a branch is unmerged, or
   acting on a stale-looking TODO/branch, check patch-equivalence:
-  `git cherry origin/main origin/<branch>` — `-` = already on main (skip it), `+` =
-  genuinely outstanding.
+  `git cherry origin/main origin/<branch>` — `-` = already on main (skip it), `+` = **no
+  identical patch found**, which is not proof the work is missing: work that landed
+  **re-authored** reports `+` forever, so grep main for the branch's distinctive
+  identifiers before reviving a stale branch (`/branch-prune` step 2a).
 - Deleting a merged local branch after a rebase-merge needs `git branch -D` (not `-d`):
   git doesn't see the rewritten SHAs as "merged".
 - Use `/rebase-arm-automerge` to land a PR hands-off and `/branch-prune` to clean up

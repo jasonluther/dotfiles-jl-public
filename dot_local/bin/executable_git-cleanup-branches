@@ -3,6 +3,13 @@
 
 By default, reports which branches can be removed (dry-run).
 Pass --delete to prompt for actual deletion.
+
+Deletion is driven by patch-id equivalence, which is sound in one direction only: a
+patch found on main really is on main, but "no identical patch found" is not proof the
+work is missing. Work that landed *re-authored* (a later PR rewriting the same idea from
+scratch) looks unmerged forever. Stale branches in that state are flagged
+KEEP-SUSPECT for a human to check by hand; they are never auto-deleted. See
+`/branch-prune` step 2a for the content check.
 """
 
 import argparse
@@ -13,6 +20,9 @@ import time
 from dataclasses import dataclass, field
 
 GRACE_PERIOD_SECONDS = 60 * 60  # 60 minutes
+# Tripwire for a human read, not a deletion criterion: old enough that an actively
+# developed branch is never flagged, recent enough to catch one a later PR overtook.
+REAUTHOR_SUSPECT_DAYS = 7
 
 
 @dataclass
@@ -24,6 +34,7 @@ class BranchInfo:
     is_main: bool = False
     skip_reason: str | None = None
     rebased: bool = False
+    suspect_reauthored_age_days: int | None = None
 
 
 def run(*args, cwd=None):
@@ -213,6 +224,32 @@ def get_unmerged_commits(branch, main_branch):
     return truly_unmerged, rebased
 
 
+def branch_age_days(branch):
+    """Days since the branch's last commit, or None if it can't be determined."""
+    rc, out, _ = run("git", "log", "-1", "--format=%ct", branch)
+    if rc != 0 or not out:
+        return None
+    return int((time.time() - int(out)) // 86400)
+
+
+def has_open_pr(branch):
+    """Check if a GitHub PR for this branch is still open."""
+    rc, out, _ = run(
+        "gh",
+        "pr",
+        "list",
+        "--head",
+        branch,
+        "--state",
+        "open",
+        "--json",
+        "number",
+        "--jq",
+        "length",
+    )
+    return rc == 0 and out.strip() not in ("", "0")
+
+
 def has_merged_pr(branch):
     """Check if a GitHub PR for this branch was merged."""
     rc, out, _ = run(
@@ -307,6 +344,17 @@ def main():
             info.unmerged_subjects = []
             info.rebased = True
 
+        # A stale branch that still looks unmerged may have been re-authored onto main
+        # by a later PR; patch-id comparison cannot see that. Flag, never delete.
+        if info.unmerged_subjects:
+            age = branch_age_days(branch)
+            if (
+                age is not None
+                and age >= REAUTHOR_SUSPECT_DAYS
+                and not has_open_pr(branch)
+            ):
+                info.suspect_reauthored_age_days = age
+
         infos.append(info)
 
     # Display results
@@ -337,6 +385,14 @@ def main():
             for subj in info.unmerged_subjects:
                 print(f"    - {subj}")
             has_issues = True
+            if info.suspect_reauthored_age_days is not None:
+                print(
+                    f"  KEEP-SUSPECT: last commit {info.suspect_reauthored_age_days}d old, "
+                    "no open PR — possibly re-authored onto "
+                    f"{main_branch}. Verify content before reviving: grep {main_branch} for "
+                    "distinctive identifiers from this branch's diff (see /branch-prune "
+                    "step 2a). Not deleted."
+                )
         elif info.rebased:
             print(f"  All commits rebased into {main_branch}")
 
