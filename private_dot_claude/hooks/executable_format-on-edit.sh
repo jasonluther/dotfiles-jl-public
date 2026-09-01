@@ -45,6 +45,29 @@ def which(*names: str) -> str | None:
     return None
 
 
+def project_root_for(path: str) -> str:
+    """The directory prettier must run FROM for its ignore files to apply.
+
+    Prettier resolves ``--ignore-path``'s defaults (``.prettierignore``,
+    ``.gitignore``) against the *current working directory* — it does not walk
+    upward from the file. This hook inherits the harness's cwd, which for a
+    session launched from a worktree hub is a DIFFERENT checkout than the file
+    being edited: the edited project's ``.prettierignore`` then never loads,
+    and a blanket ``*.md`` ignore silently stops protecting Markdown
+    (measured 2026-09-01: a docs edit in a sibling worktree got a
+    full-document rewrap, ``*emphasis*`` -> ``_emphasis_``, from a hook run
+    whose cwd was the hub checkout). Run formatters from the edited file's own
+    project root instead: the nearest ancestor holding ``.prettierignore``,
+    ``.git``, or ``package.json``, falling back to the file's directory.
+    """
+    resolved = Path(path).resolve()
+    for parent in [resolved.parent, *resolved.parent.parents]:
+        for marker in (".prettierignore", ".git", "package.json"):
+            if (parent / marker).exists():
+                return str(parent)
+    return str(resolved.parent)
+
+
 def which_node_tool(path: str, name: str) -> str | None:
     """Resolve an npm-provided formatter against the PROJECT, not just PATH.
 
@@ -108,9 +131,9 @@ def has_conflict_markers(path: str) -> bool:
     return CONFLICT_MARKER_RE.search(text) is not None
 
 
-def run(cmd: list[str]) -> None:
+def run(cmd: list[str], cwd: str | None = None) -> None:
     try:
-        subprocess.run(cmd, capture_output=True, timeout=TIMEOUT, check=False)
+        subprocess.run(cmd, capture_output=True, timeout=TIMEOUT, check=False, cwd=cwd)
     except (subprocess.SubprocessError, OSError):
         pass
 
@@ -153,20 +176,26 @@ def format_python(path: str) -> None:
 
 
 def format_markdown(path: str) -> None:
+    # cwd matters, not just the binary: prettier/markdownlint load their
+    # ignore files from the working directory (see project_root_for).
+    root = project_root_for(path)
     if prettier := which_node_tool(path, "prettier"):
-        run([prettier, "--write", "--log-level", "silent", path])
+        run([prettier, "--write", "--log-level", "silent", path], cwd=root)
     elif not which("prettier") and (mdformat := which("mdformat")):
         # Only when this machine has no prettier at all. A deliberate skip
         # (project pins prettier, node_modules absent) must NOT fall through
         # to a different formatter with a different house style.
         run([mdformat, path])
     if mdlint := which_node_tool(path, "markdownlint"):
-        run([mdlint, "--fix", path])
+        run([mdlint, "--fix", path], cwd=root)
 
 
 def format_with_prettier(path: str) -> None:
     if prettier := which_node_tool(path, "prettier"):
-        run([prettier, "--write", "--log-level", "silent", path])
+        run(
+            [prettier, "--write", "--log-level", "silent", path],
+            cwd=project_root_for(path),
+        )
 
 
 def format_shell(path: str) -> None:
