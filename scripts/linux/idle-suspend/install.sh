@@ -41,11 +41,46 @@ install -m 644 "$HERE/50-idle-suspend.rules" /etc/polkit-1/rules.d/
 
 # Debian's default install masks sleep.target/suspend.target/hibernate.target/
 # hybrid-sleep.target (server images assume a host should never sleep
-# unattended) — seen on snoopy dated to its initial provisioning, long before
-# idle-suspend existed to opt back in. A masked suspend.target makes every
+# unattended) — seen on an affected host, dated to its initial provisioning and
+# so long predating idle-suspend's opt-in. A masked suspend.target makes every
 # suspend attempt fail with "Access denied" — the same symptom as the polkit
 # gap above, but a different and unrelated cause; unmask is idempotent.
 systemctl unmask sleep.target suspend.target hibernate.target hybrid-sleep.target
+
+# A graphical login screen is a SECOND, uninterlocked suspender. GNOME's greeter
+# session runs gsd-power with its own idle policy (sleep-inactive-ac-type=suspend
+# at 900s by default) and calls logind's Suspend() directly, so a host sitting at
+# the greeter suspends on GNOME's timer regardless of what the check script above
+# decided — none of the SSH/process/load interlocks apply to it. Measured on a CI
+# runner: the box suspended mid-job while idle-suspend was logging "busy" on every
+# tick; systemd-sleep froze the whole user slice, and the job died hours later
+# against a service that had long since given up on it. Hardening logind is not
+# enough either — IdleAction governs logind's own timer, not this caller.
+#
+# idle-suspend is meant to be the only thing that suspends this machine, so turn
+# the greeter's own policy off. Best-effort: a host with no GDM just skips it.
+if command -v dbus-run-session >/dev/null 2>&1; then
+  for gdm_user in Debian-gdm gdm; do
+    id -u "$gdm_user" >/dev/null 2>&1 || continue
+    for key in sleep-inactive-ac-type sleep-inactive-battery-type; do
+      runuser -u "$gdm_user" -- dbus-run-session -- \
+        gsettings set org.gnome.settings-daemon.plugins.power "$key" nothing \
+        >/dev/null 2>&1 || true
+    done
+    # A dconf write reaches a RUNNING greeter only over that greeter's own session
+    # bus, which this throwaway bus is not — so a greeter started before this ran
+    # keeps the old value in memory until it restarts. Deliberately NOT restarting
+    # gdm here: that would kill an active desktop session. (Learned the hard way —
+    # reading the value back showed the new setting while the live daemon went on
+    # suspending the box. Reading a setting back proves the setting, not that
+    # anything reloaded it.)
+    if systemctl is-active --quiet gdm3 2>/dev/null \
+      || systemctl is-active --quiet gdm 2>/dev/null; then
+      echo "greeter auto-suspend disabled — takes effect after 'systemctl restart gdm3' or a reboot"
+    fi
+    break
+  done
+fi
 
 CONF=/etc/idle-suspend.conf
 if [ -e "$CONF" ]; then
