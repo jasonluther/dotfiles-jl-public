@@ -16,8 +16,6 @@
 // own UID) — no other logind actions, no escalation.
 // Installed to /etc/polkit-1/rules.d/ by install.sh (idempotent); polkitd
 // watches rules.d and reloads automatically.
-// Owner-confirmed 2026-07-18 (snoopy: 6+ consecutive "Access denied" cycles
-// over ~35 min, idle-suspend never once actually suspending).
 polkit.addRule(function (action, subject) {
   if (
     (action.id == "org.freedesktop.login1.suspend" ||
