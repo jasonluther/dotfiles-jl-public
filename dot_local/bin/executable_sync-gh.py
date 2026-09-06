@@ -15,11 +15,20 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import tempfile
 import time
 from pathlib import Path
+
+# Bounds on every subprocess that can touch the network. A connection reset
+# mid-transfer leaves git blocked on a read with no timeout of its own; without
+# these a single wedged repo hangs the whole run, and because launchd will not
+# restart a still-running agent, every later scheduled run is silently skipped
+# too. (This is exactly how wip-sync stopped snapshotting for 10 days.)
+NET_TIMEOUT = 300
+RUN_TIMEOUT = 1800
 
 # Branch-name-safe sanitizer for hostnames (covers macOS names with
 # apostrophes/spaces like "Jason's MBP").
@@ -116,6 +125,7 @@ def get_orgs():
         capture_output=True,
         text=True,
         check=True,
+        timeout=NET_TIMEOUT,
     )
     return result.stdout.split()
 
@@ -131,7 +141,9 @@ def _list_repos(owner=None):
         "--json",
         "name,nameWithOwner,url,isArchived,isPrivate",
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, check=True, timeout=NET_TIMEOUT
+    )
     return json.loads(result.stdout)
 
 
@@ -158,6 +170,7 @@ def clone_repo(name, url, dest):
         ["gh", "repo", "clone", url, str(dest)],
         capture_output=True,
         text=True,
+        timeout=NET_TIMEOUT,
     )
 
 
@@ -167,6 +180,7 @@ def pull_repo(name, dest):
         ["git", "-C", str(dest), "pull", "--ff-only"],
         capture_output=True,
         text=True,
+        timeout=NET_TIMEOUT,
     )
     if result.returncode != 0:
         print(f"  {name}: pull failed ({result.stderr.strip()})")
@@ -185,15 +199,27 @@ def in_progress_op(dest):
     return None
 
 
-def _git(dest, args, env=None, check=False):
-    """Run `git -C dest ...`, capturing output. Thin wrapper for brevity."""
-    return subprocess.run(
-        ["git", "-C", str(dest), *args],
-        capture_output=True,
-        text=True,
-        env=env,
-        check=check,
-    )
+def _git(dest, args, env=None, check=False, timeout=NET_TIMEOUT):
+    """Run `git -C dest ...`, capturing output. Thin wrapper for brevity.
+
+    A timed-out call comes back as a normal failed CompletedProcess (rc 124) so
+    callers that already branch on returncode report it and carry on to the next
+    repo, rather than the run dying on one unreachable remote.
+    """
+    cmd = ["git", "-C", str(dest), *args]
+    try:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env,
+            check=check,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        if check:
+            raise
+        return subprocess.CompletedProcess(cmd, 124, "", f"timed out after {timeout}s")
 
 
 def has_head(dest):
@@ -571,6 +597,11 @@ def sanitized_hostname():
     return safe or "unknown-host"
 
 
+def _abort_run(signum, frame):
+    """Hard cap on a single run, so the agent can never wedge indefinitely."""
+    raise SystemExit(f"sync-gh: aborting run, exceeded {RUN_TIMEOUT}s budget")
+
+
 def main():
     args = parse_args()
     hostname = sanitized_hostname()
@@ -664,4 +695,6 @@ def main():
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGALRM, _abort_run)
+    signal.alarm(RUN_TIMEOUT)
     main()
