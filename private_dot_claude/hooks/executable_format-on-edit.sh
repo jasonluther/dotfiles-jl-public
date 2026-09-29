@@ -176,8 +176,11 @@ def format_python(path: str) -> None:
 
 
 def format_markdown(path: str) -> None:
-    # cwd matters, not just the binary: prettier/markdownlint load their
-    # ignore files from the working directory (see project_root_for).
+    # cwd matters, not just the binary: prettier loads its ignore file from
+    # the working directory (see project_root_for). Do not run
+    # ``markdownlint --fix`` here — that is a linter, and --fix rewrites
+    # to MD013 width from the nearest .markdownlint.yaml, bypassing
+    # prettier's ignore policy (e.g. docs intentionally left unwrapped).
     root = project_root_for(path)
     if prettier := which_node_tool(path, "prettier"):
         run([prettier, "--write", "--log-level", "silent", path], cwd=root)
@@ -186,8 +189,6 @@ def format_markdown(path: str) -> None:
         # (project pins prettier, node_modules absent) must NOT fall through
         # to a different formatter with a different house style.
         run([mdformat, path])
-    if mdlint := which_node_tool(path, "markdownlint"):
-        run([mdlint, "--fix", path], cwd=root)
 
 
 def format_with_prettier(path: str) -> None:
