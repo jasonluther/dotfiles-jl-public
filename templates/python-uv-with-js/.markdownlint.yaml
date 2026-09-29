@@ -1,7 +1,7 @@
 # Markdownlint configuration for technical documentation
 # See: https://github.com/markdownlint/markdownlint/blob/main/docs/RULES.md
 
-# Disable line length checking - mdformat handles automatic wrapping
+# Line length tracks Prettier printWidth (88) so the two never disagree
 MD013:
   line_length: 88
   code_blocks: false
