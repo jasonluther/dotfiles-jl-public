@@ -42,7 +42,7 @@
     }
   },
   "auto-build.defaultEnv.name": "at90usb1286_dfu",
-  "editor.wordWrapColumn": 72,
+  "editor.wordWrapColumn": 88,
   "editor.wordWrap": "on",
   "window.zoomLevel": 2,
   "python.analysis.extraPaths": ["${workspaceFolder}/src"],
@@ -75,7 +75,7 @@
   "git.openRepositoryInParentFolders": "always",
   "github.copilot.editor.enableAutoCompletions": true,
   "rewrap.autoWrap.enabled": true,
-  "rewrap.wrappingColumn": 72,
+  "rewrap.wrappingColumn": 88,
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "never",
     "source.organizeImports": "explicit",
@@ -107,6 +107,7 @@
     "editor.fontSize": 14,
     "editor.lineHeight": 1.6,
     "editor.wordWrap": "on",
+    "editor.wordWrapColumn": 88,
     "editor.quickSuggestions": {
       "comments": "off",
       "strings": "off",

@@ -140,6 +140,33 @@ def test_main_ignores_missing_file(tmp_path: Path, monkeypatch):
     assert not missing.exists()
 
 
+def test_format_markdown_runs_prettier_not_markdownlint(tmp_path: Path, monkeypatch):
+    # markdownlint --fix rewrites to MD013 width and fights prettier ignore
+    # policy; the hook must format via prettier (or mdformat) only.
+    p = tmp_path / "note.md"
+    p.write_text("# hi\n")
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(
+        hook,
+        "which_node_tool",
+        lambda path, name: f"/fake/{name}" if name == "prettier" else f"/bad/{name}",
+    )
+    monkeypatch.setattr(hook, "project_root_for", lambda path: str(tmp_path))
+    monkeypatch.setattr(
+        hook,
+        "run",
+        lambda cmd, cwd=None: calls.append(list(cmd) + ([cwd] if cwd else [])),
+    )
+
+    hook.format_markdown(str(p))
+
+    assert calls == [
+        ["/fake/prettier", "--write", "--log-level", "silent", str(p), str(tmp_path)]
+    ]
+    assert not any("markdownlint" in c[0] for c in calls)
+
+
 def test_shebang_file_is_importable():
     # The hook is named *.sh for chezmoi's executable_ prefix convention but
     # is a Python script; keep that invariant underfoot so a future rename
