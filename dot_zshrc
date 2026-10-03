@@ -39,3 +39,8 @@ if command -v chezmoi &>/dev/null; then
     echo "[dotfiles] Local changes detected. Run 'chezmoi diff' to review, 'chezmoi re-add' to keep, or 'chezmoi apply' to discard."
   fi
 fi
+
+# opencode
+if [[ -d "$HOME/.opencode/bin" ]]; then
+  export PATH="$HOME/.opencode/bin:$PATH"
+fi
