@@ -10,12 +10,16 @@
 # `chezmoi apply --force` (the daily updater) would silently revert every GUI
 # change. Keys the template does not mention are left untouched.
 #
-# Fallback: if the live file is not valid JSON (e.g. you hand-added // comments),
-# emit the managed content verbatim so a non-interactive apply never errors —
-# i.e. it degrades to the old force-overwrite behavior rather than failing.
+# VS Code writes settings.json as JSONC with trailing commas, which jq rejects;
+# strip those first so the merge (and your local keys) survive GUI edits. The
+# regex consumes whole string literals first, so commas inside values are kept.
+#
+# Fallback: if the live file is still not valid JSON (e.g. you hand-added //
+# comments), emit the managed content verbatim so a non-interactive apply never
+# errors — i.e. it degrades to the old force-overwrite behavior rather than failing.
 set -euo pipefail
 
-local_json="$(cat)"
+local_json="$(perl -0pe 's/("(?:[^"\\]|\\.)*")|,(\s*[}\]])/defined $1 ? $1 : $2/ge')"
 managed_json="$(cat <<'MANAGED_JSON_EOF'
 {{ template "code-user-settings.json" . }}
 MANAGED_JSON_EOF
