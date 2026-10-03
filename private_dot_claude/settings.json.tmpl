@@ -207,5 +207,5 @@
   "skipWorkflowUsageWarning": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true{{- $automodePath := joinPath .chezmoi.homeDir ".claude/automode-partygame.json" }}{{- if stat $automodePath }},
-  "autoMode": {{ include $automodePath | trimSuffix "\n" }}{{- end }}
+  "autoMode": {{ include $automodePath | trimSuffix "\n" | indent 2 | trimPrefix "  " }}{{- end }}
 }
