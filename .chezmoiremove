@@ -19,3 +19,9 @@
 # error because the old command passed its whole argument to `review-diff`,
 # which takes a branch or --since and reads "low" as a branch name.
 .claude/commands/code-review.md
+
+# Personal copies retired: partygame ships newer repo skills of the same names
+# and no other repo used them (Oct 2026 usage audit).
+.claude/commands/branch-prune.md
+.claude/commands/watch-to-merge.md
+.claude/commands/rebase-arm-automerge.md
