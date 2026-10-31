@@ -16,7 +16,8 @@ precedence over anything here.
 - Deleting a merged local branch after a rebase-merge needs `git branch -D` (not `-d`):
   git doesn't see the rewritten SHAs as "merged".
 - Use `/rebase-arm-automerge` to land a PR hands-off and `/branch-prune` to clean up
-  merged remote branches (both are rebase-safe). Prefer enabling repo `delete_branch_on_merge`
+  merged remote branches (both are rebase-safe; they, and `/watch-to-merge`, ship as repo
+  skills in partygame, not as personal commands). Prefer enabling repo `delete_branch_on_merge`
   so the pileup doesn't recur.
 - **Auto-merge armed ≠ merged.** Armed auto-merge stalls silently — a slow required check
   never posting, the PR falling behind another merge, or a blocked/dirty state. Don't call

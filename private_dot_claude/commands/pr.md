@@ -5,6 +5,10 @@ description: Open a pull request with review, squash, and monitoring
 
 Open a pull request for the current branch with review, squash, and monitoring.
 
+**Not for a repo whose CLAUDE.md sets its own PR flow (partygame: rebase-only, every
+commit lands; review is the built-in `/code-review`).** There, stop and follow that
+repo's GitHub Workflow section instead.
+
 If `$ARGUMENTS` is `merge`, skip to the [Merge flow](#merge-flow) section instead.
 
 ## Arguments
