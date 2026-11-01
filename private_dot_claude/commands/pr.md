@@ -145,8 +145,9 @@ listing workflows with `gh workflow list` and picking the one that isn't a revie
 - If CI **fails**: show the failing job details with `gh run view <run-id>`. Investigate
   the failures, fix them, commit, push, and re-watch CI. Do NOT wait for the review
   workflow — it'll be stale after the fix anyway.
-- If CI **passes**: report success, then watch the review workflow in the background.
-  Find its run and watch it:
+- If CI **passes**: report success. If the repo has an automated review workflow
+  (`gh workflow list` shows one, e.g. `claude-code-review.yml`), watch it in the
+  background; otherwise stop here. Find its run and watch it:
 
   ```bash
   gh run list --branch <branch> --workflow claude-code-review.yml --limit 1 --json databaseId --jq '.[0].databaseId'
