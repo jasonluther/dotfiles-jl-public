@@ -51,6 +51,10 @@
       "Bash(ssh-add:*)",
       "Bash(standup list:*)",
       "Bash(standup status:*)",
+      "Bash(standup claim:*)",
+      "Bash(standup done:*)",
+      "Bash(standup park:*)",
+      "Bash(standup resume:*)",
       "Bash(sysctl:*)",
       "Bash(tmutil listlocalsnapshots:*)",
       "Bash(time:*)",
@@ -172,6 +176,18 @@
             "type": "command",
             "command": "[ -x \"$HOME/.local/bin/standup\" ] && \"$HOME/.local/bin/standup\" subagent-stop || true",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "rate_limit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x \"$HOME/.local/bin/standup\" ] && \"$HOME/.local/bin/standup\" park || true",
+            "timeout": 20
           }
         ]
       }
