@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Thin wrapper for scripts/linux/setup-mise.sh.
+#
+# Runs before install-packages so apt can find mise when the package
+# installer fires. The `00-` prefix forces this ahead of install-packages.
+#
+# script hash: {{ include "scripts/linux/setup-mise.sh" | sha256sum }}
+
+{{ if eq .chezmoi.os "linux" -}}
+exec {{ joinPath .chezmoi.sourceDir "scripts/linux/setup-mise.sh" | quote }}
+{{- else -}}
+# Linux-only: skipped on {{ .chezmoi.os }}.
+{{- end }}

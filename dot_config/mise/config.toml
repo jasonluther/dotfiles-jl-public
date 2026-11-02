@@ -1,0 +1,8 @@
+# Global mise settings. No global tool versions: outside a pinned repo the
+# system node (NodeSource on Linux, brew on macOS) stays first on PATH.
+[settings]
+# Read a repo's .nvmrc. Python stays uv's (.python-version), so not listed.
+idiomatic_version_file_enable_tools = ["node"]
+# No shims dir on PATH: pre-commit refuses a node in ~ or a shims dir and
+# downloads its own instead, so only a pinned repo's install goes on PATH.
+activate_shims = false
