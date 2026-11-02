@@ -34,3 +34,7 @@ unset _brew
 [[ -d $HOME/.local/bin ]] && path=($HOME/.local/bin $path)
 
 export PATH
+
+# mise puts the Node a repo pins in .nvmrc first on PATH, at startup and on
+# every cd, so agents' and ssh's one-shot shells get it too (~30ms).
+command -v mise >/dev/null && eval "$(mise activate zsh)"
