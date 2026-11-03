@@ -87,7 +87,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebSearch",
       "mcp__claude_ai_Atlassian__getConfluencePage",
-      "mcp__claude_ai_Atlassian__getConfluenceSpaces"
+      "mcp__claude_ai_Atlassian__getConfluenceSpaces"{{- $privateAllowPath := joinPath .chezmoi.homeDir ".claude/permissions-allow-private.json" }}{{- if stat $privateAllowPath }}{{- range include $privateAllowPath | fromJson }},
+      {{ toJson . }}{{- end }}{{- end }}
     ],
     "deny": [],
     "ask": [],
