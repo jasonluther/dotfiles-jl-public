@@ -12,18 +12,11 @@ precedence over anything here.
   `git cherry origin/main origin/<branch>` — `-` = already on main (skip it), `+` = **no
   identical patch found**, which is not proof the work is missing: work that landed
   **re-authored** reports `+` forever, so grep main for the branch's distinctive
-  identifiers before reviving a stale branch (`/branch-prune` step 2a).
+  identifiers before reviving a stale branch.
 - Deleting a merged local branch after a rebase-merge needs `git branch -D` (not `-d`):
   git doesn't see the rewritten SHAs as "merged".
-- Use `/watch-to-merge` to land a PR (arm, then watch it to merged) and `/branch-prune` to
-  clean up merged remote branches. Both are rebase-safe and ship as repo skills in
-  partygame, not as personal commands. Prefer enabling repo `delete_branch_on_merge` so the
-  pileup doesn't recur.
-- **Auto-merge armed ≠ merged.** Armed auto-merge stalls silently — a slow required check
-  never posting, the PR falling behind another merge, or a blocked/dirty state. Don't call
-  a task done at "auto-merge armed": watch the PR through to `state == MERGED` (use
-  `/watch-to-merge`, which polls and recovers those stalls). Only a merge commit in the
-  base branch's log proves the work shipped.
+- **Auto-merge armed ≠ merged**: it stalls silently, so only a merge commit in the base
+  branch's log proves the work shipped.
 
 ## Working safely
 
