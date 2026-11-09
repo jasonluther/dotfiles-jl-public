@@ -49,6 +49,11 @@ cat >"$managed" <<'MANAGED_GITCONFIG_EOF'
 [include]
 	path = ~/.config/git/aliases
 	path = ~/.config/git/delta
+# Patent-OAR repos commit as the company address (poar-infra requires it in CI); everything else uses .email.
+[includeIf "hasconfig:remote.*.url:https://github.com/patent-oar/**"]
+	path = ~/.config/git/patent-oar
+[includeIf "hasconfig:remote.*.url:git@github.com:patent-oar/**"]
+	path = ~/.config/git/patent-oar
 MANAGED_GITCONFIG_EOF
 
 # Append keys present in the existing file but NOT defined by the managed
