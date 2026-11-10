@@ -58,10 +58,11 @@ MANAGED_GITCONFIG_EOF
 
 # Append keys present in the existing file but NOT defined by the managed
 # config, preserving their (possibly multi-) values. Keys managed defines are
-# left as managed wrote them.
-comm -13 \
-  <(git config -f "$managed" --list --name-only 2>/dev/null | sort -u || true) \
-  <(git config -f "$local" --list --name-only 2>/dev/null | sort -u || true) |
+# left as managed wrote them. awk, not sort|comm: macOS's UTF-8 collation made
+# comm refuse sort's output ("not in sorted order").
+awk 'NR == FNR { managed[$0]; next } !($0 in managed) && !seen[$0]++' \
+  <(git config -f "$managed" --list --name-only 2>/dev/null || true) \
+  <(git config -f "$local" --list --name-only 2>/dev/null || true) |
   while IFS= read -r key; do
     [ -n "$key" ] || continue
     git config -f "$local" --get-all "$key" | while IFS= read -r val; do
