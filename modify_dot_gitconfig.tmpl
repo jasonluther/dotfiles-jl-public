@@ -49,6 +49,9 @@ cat >"$managed" <<'MANAGED_GITCONFIG_EOF'
 [include]
 	path = ~/.config/git/aliases
 	path = ~/.config/git/delta
+	# Private overlay hook (per-org identities etc.); git skips it if absent.
+	# Last, so it can override anything above.
+	path = ~/.config/git/local
 MANAGED_GITCONFIG_EOF
 
 # Append keys present in the existing file but NOT defined by the managed

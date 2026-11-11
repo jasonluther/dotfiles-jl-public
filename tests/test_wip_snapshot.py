@@ -257,6 +257,17 @@ def test_classify(tmp_path, monkeypatch):
     assert sg.classify_repo(proj) == "bundle"
     assert sg.classify_repo(tmp_path / "nope") == "skip"
 
+    cfg = tmp_path / "cfg"
+    (cfg / "sync-gh").mkdir(parents=True)
+    (cfg / "sync-gh" / "wip-exclude").write_text("# private\nAcme-Corp\n")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(cfg))
+    excluded = init_repo(gh / "excl")
+    sg._git(excluded, ["remote", "add", "origin", "https://github.com/acme-corp/x.git"])
+    assert sg.classify_repo(excluded) == "skip"
+    ssh = init_repo(gh / "ssh")
+    sg._git(ssh, ["remote", "add", "origin", "git@github.com:kilotronic/x.git"])
+    assert sg.classify_repo(ssh) == "push"
+
 
 def test_iter_local_repos(tmp_path):
     root = tmp_path / "root"

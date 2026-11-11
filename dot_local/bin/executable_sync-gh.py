@@ -92,9 +92,9 @@ WIP_STATUS_FILE = Path.home() / ".local" / "var" / "wip-sync.status"
 ENV_ORGS = "SYNC_GH_ORGS"
 
 
-def _config_path():
+def _config_path(name="orgs"):
     base = os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")
-    return Path(base) / "sync-gh" / "orgs"
+    return Path(base) / "sync-gh" / name
 
 
 def _parse_org_list(text):
@@ -225,6 +225,26 @@ def _git(dest, args, env=None, check=False, timeout=NET_TIMEOUT):
 def has_head(dest):
     """True if HEAD resolves to a commit (repo has at least one commit)."""
     return _git(dest, ["rev-parse", "--verify", "--quiet", "HEAD"]).returncode == 0
+
+
+def wip_exclude_owners():
+    """GitHub owners whose repos never get WIP snapshots (no wip/ branch, no
+    bundle), read from $XDG_CONFIG_HOME/sync-gh/wip-exclude (same format as
+    the orgs file). Lowercased; empty when the file is absent.
+    """
+    cfg = _config_path("wip-exclude")
+    if not cfg.is_file():
+        return set()
+    return {o.lower() for o in _parse_org_list(cfg.read_text())}
+
+
+def origin_owner(dest):
+    """Lowercased GitHub owner from origin's URL (https or ssh), else None."""
+    res = _git(dest, ["remote", "get-url", "origin"])
+    if res.returncode != 0:
+        return None
+    m = re.search(r"github\.com[:/]([^/]+)/", res.stdout.strip())
+    return m.group(1).lower() if m else None
 
 
 def has_origin(dest):
@@ -485,13 +505,15 @@ def classify_repo(dest):
     Only repos directly under ~/Code/gh (private-by-convention) with an origin
     are pushed to a wip branch — we never push WIP to a public remote. Public
     repos, ~/Projects repos, and remoteless/local-only repos are bundled.
-    Archived repos are skipped.
+    Archived repos and repos whose owner is in the wip-exclude file are skipped.
     """
     dest = Path(dest)
     if not (dest / ".git").exists():
         return "skip"
     parent = dest.parent
     if parent in (ARCHIVED_DIR, ARCHIVED_PUBLIC_DIR):
+        return "skip"
+    if origin_owner(dest) in wip_exclude_owners():
         return "skip"
     if parent == GH_DIR and has_origin(dest):
         return "push"
@@ -656,6 +678,7 @@ def main():
     to_clone = []
     to_pull = []
     to_push_wip = []
+    excluded = wip_exclude_owners()
     for repo in repos:
         name = repo["name"]
         dest = repo_dir(repo) / name
@@ -663,7 +686,8 @@ def main():
             if not repo["isArchived"]:
                 to_pull.append((name, dest))
                 # Only auto-push for PRIVATE repos — public stays user-driven.
-                if args.push_wip and repo["isPrivate"]:
+                owner = repo["nameWithOwner"].split("/")[0].lower()
+                if args.push_wip and repo["isPrivate"] and owner not in excluded:
                     to_push_wip.append((name, dest))
         else:
             to_clone.append((repo, dest))
