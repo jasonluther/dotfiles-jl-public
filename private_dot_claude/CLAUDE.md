@@ -20,6 +20,10 @@ precedence over anything here.
 
 ## Working safely
 
+- **No polling watchers on GitHub.** Every session on one account shares GitHub's 5,000-an-hour API
+  limit. One-off `gh` calls are fine; a loop that re-checks PRs, runs or deploys every few
+  minutes is what exhausts it. Wait on a run with one `gh run watch` or `gh pr checks
+  --watch --interval 60`, or check once when it should be done; prefer GitHub auto-merge.
 - **Verify before claiming done.** Run the command and read the output before saying a test
   passes, a fix works, or a deploy is live — evidence before assertions. If something is
   skipped or failing, say so plainly.
