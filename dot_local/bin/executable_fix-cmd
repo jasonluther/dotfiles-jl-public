@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""fix-cmd — clean a terminal-wrapped shell command and run it.
+
+Claude Code suggests commands like `! gcloud auth login --no-launch-browser`
+and wraps long ones across lines. Copying that from the terminal leaves a
+leading `!`, indentation, and embedded newlines. fix-cmd joins the lines
+with single spaces (a trailing `\\` continuation is honoured), strips a
+leading `!`, shows the full command, and runs it in $SHELL after you press
+`y` (any other key aborts, no Enter needed).
+
+A wrap that split a single word (a long URL or path) is rejoined with a
+space, so check the printed command before pressing `y`.
+
+Usage:
+    fix-cmd             # read clipboard, confirm, run
+    fix-cmd -f          # --force: run without confirming
+    pbpaste | fix-cmd   # read stdin instead of the clipboard
+"""
+
+import os
+import platform
+import shutil
+import subprocess
+import sys
+import termios
+import tty
+
+
+def clean(text: str) -> str:
+    parts = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line.endswith("\\"):
+            line = line[:-1].rstrip()
+        if line:
+            parts.append(line)
+    cmd = " ".join(parts)
+    if cmd.startswith("!"):
+        cmd = cmd[1:].lstrip()
+    return cmd
+
+
+def _run(cmd: list[str]) -> str:
+    return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
+
+
+def read_input() -> str:
+    if not sys.stdin.isatty():
+        return sys.stdin.read()
+
+    if platform.system() == "Darwin":
+        return _run(["pbpaste"])
+
+    for cmd in (["xclip", "-selection", "clipboard", "-o"], ["wl-paste"]):
+        if shutil.which(cmd[0]):
+            return _run(cmd)
+
+    sys.exit("fix-cmd: no clipboard tool found (need xclip or wl-paste)")
+
+
+def read_key() -> str:
+    with open("/dev/tty") as tty_in:
+        fd = tty_in.fileno()
+        saved = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            return tty_in.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+
+
+def confirm(cmd: str) -> bool:
+    print(f"fix-cmd will run:\n\n  {cmd}\n", file=sys.stderr)
+    print("Run it? [y/N] ", end="", file=sys.stderr, flush=True)
+    key = read_key()
+    print(key if key.isprintable() else "", file=sys.stderr)
+    return key == "y"
+
+
+def main() -> None:
+    args = sys.argv[1:]
+    if args and args[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return
+    force = bool(args and args[0] in ("-f", "--force"))
+
+    cmd = clean(read_input())
+    if not cmd:
+        sys.exit("fix-cmd: no command (clipboard/stdin is empty)")
+
+    if force:
+        print(f"fix-cmd: running: {cmd}", file=sys.stderr)
+    elif not confirm(cmd):
+        sys.exit("fix-cmd: aborted")
+
+    shell = os.environ.get("SHELL") or "/bin/sh"
+    os.execv(shell, [shell, "-c", cmd])
+
+
+if __name__ == "__main__":
+    main()
