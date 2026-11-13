@@ -33,7 +33,8 @@ reports work that landed as the **same patch**. It cannot see work that landed
   authorized pruning, show the dry-run report and get a yes before `--apply`. `--apply`
   acts on the PRUNE and REMOVE lists only.
 - If the project has its own `branch-prune` skill or pruning rules (protected ref
-  namespaces, standing authorizations), those take precedence.
+  namespaces, standing authorizations), those take precedence. Look for them first:
+  `git grep -n -i -E 'prun|merged branch|standing authori' -- '*.md'`.
 
 ## Steps
 
