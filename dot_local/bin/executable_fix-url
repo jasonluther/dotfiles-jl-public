@@ -52,10 +52,11 @@ def extract(text: str) -> str:
             break
         if ch in CLOSERS:
             open_brackets.append(CLOSERS[ch])
-        elif ch in CLOSERS.values():
-            if not open_brackets or open_brackets.pop() != ch:
-                end = i
-                break
+        elif ch in CLOSERS.values() and (
+            not open_brackets or open_brackets.pop() != ch
+        ):
+            end = i
+            break
     return text[match.start() : end].rstrip(TRAILING_PUNCT)
 
 
