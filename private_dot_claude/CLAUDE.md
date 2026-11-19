@@ -15,6 +15,8 @@ precedence over anything here.
   identifiers before reviving a stale branch.
 - Deleting a merged local branch after a rebase-merge needs `git branch -D` (not `-d`):
   git doesn't see the rewritten SHAs as "merged".
+- **Remove your own worktrees and branches once their PR has merged** (`git worktree remove`,
+  `git branch -D`); older strays go through the `branch-prune` skill.
 - **Auto-merge armed ≠ merged**: it stalls silently, so only a merge commit in the base
   branch's log proves the work shipped.
 
@@ -30,6 +32,9 @@ precedence over anything here.
 - **Verify before claiming done.** Run the command and read the output before saying a test
   passes, a fix works, or a deploy is live — evidence before assertions. If something is
   skipped or failing, say so plainly.
+- **No go-ahead for routine, reversible work** inside the project's rules (spending under its limit, your
+  own PRs, docs, cleaning up your own branches): do it and say so. Ask only for what the rules list or what
+  is hard to undo.
 - **Confirm outward-facing / hard-to-reverse actions** before doing them unless durably
   authorized: force-pushing shared branches, mass-deleting branches, changing repo/CI
   settings, publishing to a public repo or external service. Approval in one context doesn't
