@@ -25,3 +25,19 @@
 .claude/commands/branch-prune.md
 .claude/commands/watch-to-merge.md
 .claude/commands/rebase-arm-automerge.md
+
+# Moved to plugins (Nov 2026): personal skills and edit hooks to jasonluther/agents (plugin jl),
+# pr/branch-prune/pr-batch to the work plugin turned on by the private overlay.
+# Leftover user-level copies would shadow or double up the plugin versions.
+.claude/commands/chezmoi.md
+.claude/commands/icloud-cleanup.md
+.claude/commands/learnings.md
+.claude/commands/lint-problems.md
+.claude/commands/pr.md
+.claude/commands/spellcheck.md
+.claude/commands/todo.md
+.claude/hooks/block-main-edits.sh
+.claude/hooks/format-on-edit.sh
+.claude/skills/branch-prune
+.claude/skills/pr-batch
+.claude/skills/fix-spotlight-reindex-storm
