@@ -104,82 +104,14 @@
   },
   "model": "opus",
   "enableAllProjectMcpServers": true,
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -x \"$HOME/.local/bin/standup\" ] && \"$HOME/.local/bin/standup\" register || true",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -x \"$HOME/.local/bin/standup\" ] && \"$HOME/.local/bin/standup\" register || true",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -x \"$HOME/.local/bin/standup\" ] && \"$HOME/.local/bin/standup\" deregister || true",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "SubagentStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -x \"$HOME/.local/bin/standup\" ] && \"$HOME/.local/bin/standup\" subagent-start || true",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -x \"$HOME/.local/bin/standup\" ] && \"$HOME/.local/bin/standup\" subagent-stop || true",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "StopFailure": [
-      {
-        "matcher": "rate_limit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -x \"$HOME/.local/bin/standup\" ] && \"$HOME/.local/bin/standup\" park || true",
-            "timeout": 20
-          }
-        ]
-      }
-    ]
-  },
   "extraKnownMarketplaces": {
-    "jasonluther-agents": { "source": { "source": "github", "repo": "jasonluther/agents" } }{{- range $name, $m := (get $plugins "extraKnownMarketplaces" | default dict) }},
+    "jasonluther-agents": { "source": { "source": "github", "repo": "jasonluther/agents" } },
+    "standup-board": { "source": { "source": "github", "repo": "kilotronic/standup-board" } }{{- range $name, $m := (get $plugins "extraKnownMarketplaces" | default dict) }},
     {{ toJson $name }}: {{ toJson $m }}{{- end }}
   },
   "enabledPlugins": {
-    "jl@jasonluther-agents": true,{{- range $name, $on := (get $plugins "enabledPlugins" | default dict) }}
+    "jl@jasonluther-agents": true,
+    "standup@standup-board": true,{{- range $name, $on := (get $plugins "enabledPlugins" | default dict) }}
     {{ toJson $name }}: {{ toJson $on }},{{- end }}
     "pyright-lsp@claude-plugins-official": false,
     "code-review@claude-plugins-official": false,
