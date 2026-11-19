@@ -4,8 +4,10 @@
 SSH sessions that print long OAuth URLs (`claude /login`, `gh auth login`,
 `aws sso login`, ...) wrap them across lines. Selecting/copying that in a
 terminal embeds newlines (and sometimes stray spaces) in the copy. fix-url
-strips all whitespace from the clipboard (or piped stdin), checks the
-result looks like a URL, opens it in the browser, and leaves the cleaned
+strips all whitespace from the clipboard (or piped stdin), pulls the URL
+out of any brackets or Markdown link around it (`(url)`, `[url]`, `<url>`,
+`[label](url)`) and drops trailing punctuation, checks the result looks
+like a URL, opens it in the browser, and leaves the cleaned
 URL on the clipboard as a fallback.
 
 Usage:
@@ -24,6 +26,38 @@ from urllib.parse import urlsplit
 
 def clean(text: str) -> str:
     return re.sub(r"\s+", "", text)
+
+
+CLOSERS = {"(": ")", "[": "]", "{": "}"}
+STOP_CHARS = set('<>"`')
+TRAILING_PUNCT = ".,;:!?'\""
+
+
+def extract(text: str) -> str:
+    """Return the first http(s) URL in text, without the brackets around it.
+
+    The URL ends at a closing bracket it didn't open, so `(url)` and
+    `[label](url)` lose their brackets while a URL with balanced parentheses
+    of its own (Wikipedia) keeps them. Text with no URL comes back unchanged.
+    """
+    match = re.search(r"https?://", text)
+    if not match:
+        return text
+    open_brackets = []
+    end = len(text)
+    for i in range(match.end(), len(text)):
+        ch = text[i]
+        if ch in STOP_CHARS:
+            end = i
+            break
+        if ch in CLOSERS:
+            open_brackets.append(CLOSERS[ch])
+        elif ch in CLOSERS.values() and (
+            not open_brackets or open_brackets.pop() != ch
+        ):
+            end = i
+            break
+    return text[match.start() : end].rstrip(TRAILING_PUNCT)
 
 
 def looks_like_url(text: str) -> bool:
@@ -84,7 +118,7 @@ def main() -> None:
     if not raw.strip():
         sys.exit("fix-url: no input (clipboard/stdin is empty)")
 
-    url = clean(raw)
+    url = extract(clean(raw))
     if not looks_like_url(url):
         sys.exit(f"fix-url: doesn't look like a URL after cleaning:\n{url}")
 

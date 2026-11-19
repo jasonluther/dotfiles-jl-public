@@ -67,3 +67,44 @@ def test_looks_like_url_false_for_non_http_scheme():
 
 def test_looks_like_url_false_for_empty_string():
     assert fix_url.looks_like_url("") is False
+
+
+def test_extract_strips_parens():
+    assert fix_url.extract("(https://example.com/a?b=c)") == "https://example.com/a?b=c"
+
+
+def test_extract_strips_square_and_angle_brackets():
+    assert fix_url.extract("[https://example.com/a]") == "https://example.com/a"
+    assert fix_url.extract("<https://example.com/a>") == "https://example.com/a"
+
+
+def test_extract_markdown_link_takes_first_url():
+    md = "[https://example.com/a](https://example.com/a)"
+    assert fix_url.extract(md) == "https://example.com/a"
+
+
+def test_extract_markdown_link_with_label():
+    assert fix_url.extract("[Sheet](https://example.com/s)") == "https://example.com/s"
+
+
+def test_extract_keeps_balanced_parens_in_url():
+    url = "https://en.wikipedia.org/wiki/Mercury_(planet)"
+    assert fix_url.extract(f"({url})") == url
+    assert fix_url.extract(url) == url
+
+
+def test_extract_drops_trailing_punctuation_and_text():
+    assert fix_url.extract("see(https://example.com/x).") == "https://example.com/x"
+    assert fix_url.extract("https://example.com/x,") == "https://example.com/x"
+
+
+def test_extract_wrapped_url_in_parens():
+    assert fix_url.extract(fix_url.clean(f"({WRAPPED})")) == CLEAN
+
+
+def test_extract_no_url_returns_text():
+    assert fix_url.extract("not a url") == "not a url"
+
+
+def test_extract_clean_url_is_unchanged():
+    assert fix_url.extract(CLEAN) == CLEAN
