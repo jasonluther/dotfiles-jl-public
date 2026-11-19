@@ -1,3 +1,8 @@
+{{- /* Private overlay (optional): ~/.claude/plugins-private.json holds extra
+     {"extraKnownMarketplaces": {...}, "enabledPlugins": {...}} kept out of this public repo. */ -}}
+{{- $plugins := dict -}}
+{{- $pluginsPath := joinPath .chezmoi.homeDir ".claude/plugins-private.json" -}}
+{{- if stat $pluginsPath }}{{ $plugins = include $pluginsPath | fromJson }}{{ end -}}
 {
   "permissions": {
     "allow": [
@@ -66,10 +71,9 @@
       "Bash(wc:*)",
       "Bash(which:*)",
       "Bash(xargs:*)",
-      "Skill(chezmoi)",
+      "Skill(jl:chezmoi)",
       "Skill(code-review)",
-      "Skill(icloud-cleanup)",
-      "Skill(pr)",
+      "Skill(jl:icloud-cleanup)",
       "Skill(simplify)",
       "Skill(loop)",
       "Skill(claude-api)",
@@ -101,30 +105,6 @@
   "model": "opus",
   "enableAllProjectMcpServers": true,
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/block-main-edits.sh",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/format-on-edit.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
         "matcher": "startup|resume|clear|compact",
@@ -194,7 +174,13 @@
       }
     ]
   },
+  "extraKnownMarketplaces": {
+    "jasonluther-agents": { "source": { "source": "github", "repo": "jasonluther/agents" } }{{- range $name, $m := (get $plugins "extraKnownMarketplaces" | default dict) }},
+    {{ toJson $name }}: {{ toJson $m }}{{- end }}
+  },
   "enabledPlugins": {
+    "jl@jasonluther-agents": true,{{- range $name, $on := (get $plugins "enabledPlugins" | default dict) }}
+    {{ toJson $name }}: {{ toJson $on }},{{- end }}
     "pyright-lsp@claude-plugins-official": false,
     "code-review@claude-plugins-official": false,
     "context7@claude-plugins-official": false,
