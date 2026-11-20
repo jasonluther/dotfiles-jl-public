@@ -13,12 +13,13 @@ concurrency:
 env:
   # Self-hosted toggle: set vars.RUNS_ON to 'self-hosted' in repo settings
   # to run PR workflows on the local macOS runner pool. Push-to-main and
-  # Dependabot PRs always use GitHub-hosted ubuntu-latest.
-  IS_SELF_HOSTED: ${{ '{{' }} github.event_name != 'push' && github.actor != 'dependabot[bot]' && vars.RUNS_ON == 'self-hosted' {{ '}}' }}
+  # Dependabot PRs, and pull requests from forks, always use GitHub-hosted
+  # ubuntu-latest.
+  IS_SELF_HOSTED: ${{ '{{' }} github.event_name != 'push' && github.actor != 'dependabot[bot]' && !github.event.pull_request.head.repo.fork && vars.RUNS_ON == 'self-hosted' {{ '}}' }}
 
 jobs:
   test:
-    runs-on: ${{ '{{' }} github.event_name != 'push' && github.actor != 'dependabot[bot]' && vars.RUNS_ON || 'ubuntu-latest' {{ '}}' }}
+    runs-on: ${{ '{{' }} github.event_name != 'push' && github.actor != 'dependabot[bot]' && !github.event.pull_request.head.repo.fork && vars.RUNS_ON || 'ubuntu-latest' {{ '}}' }}
     steps:
       - uses: actions/checkout@v6
 
