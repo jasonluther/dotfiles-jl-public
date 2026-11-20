@@ -47,9 +47,8 @@ def test_lint_workflow_runs_on():
         for line in (ROOT / ".github/workflows/lint.yml").read_text().splitlines()
         if line.strip().startswith("runs-on:")
     ]
-    assert lines == [
-        "runs-on: ${{ (github.event.repository.private && vars.RUNS_ON) || 'ubuntu-latest' }}"
-    ]
+    gated = "runs-on: ${{ (github.event.repository.private && vars.RUNS_ON) || 'ubuntu-latest' }}"
+    assert lines and all(line == gated for line in lines), lines
 
 
 TEMPLATE_GATE = (
