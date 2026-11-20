@@ -52,6 +52,28 @@ def test_lint_workflow_runs_on():
     ]
 
 
+TEMPLATE_GATE = (
+    "(github.event.repository.private && github.event_name != 'push'"
+    " && github.actor != 'dependabot[bot]' && vars.RUNS_ON"
+)
+
+
+@pytest.mark.parametrize("template", TEMPLATES)
+def test_template_runner_expressions(template):
+    text = (ROOT / f"templates/{template}/.github/workflows/ci.yml.jinja").read_text()
+    lines = [
+        ln.strip()
+        for ln in text.splitlines()
+        if "vars.RUNS_ON" in ln and "#" not in ln.split(":")[0]
+    ]
+    assert lines == [
+        "IS_SELF_HOSTED: ${{ '{{' }} "
+        + TEMPLATE_GATE
+        + " == 'self-hosted') {{ '}}' }}",
+        "runs-on: ${{ '{{' }} " + TEMPLATE_GATE + ") || 'ubuntu-latest' {{ '}}' }}",
+    ]
+
+
 def _fake_gh(tmp_path, is_private):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -61,8 +83,12 @@ def _fake_gh(tmp_path, is_private):
         "#!/usr/bin/env bash\n"
         f'echo "$*" >> "{log}"\n'
         'if [[ "$1 $2" == "repo view" ]]; then\n'
-        f'  echo "{"true" if is_private else "false"}"\n'
-        "fi\n"
+        + (
+            '  echo "gh: not logged in" >&2; exit 4\n'
+            if is_private is None
+            else f'  echo "{"true" if is_private else "false"}"\n'
+        )
+        + "fi\n"
     )
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
     env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
@@ -101,3 +127,12 @@ def test_set_runner_github_works_on_public_repo(template, tmp_path):
     result = _set_runner(template, "github", env)
     assert result.returncode == 0, result.stderr
     assert "variable delete RUNS_ON" in log.read_text()
+
+
+@pytest.mark.parametrize("template", TEMPLATES)
+def test_set_runner_stops_when_gh_fails(template, tmp_path):
+    env, log = _fake_gh(tmp_path, is_private=None)
+    result = _set_runner(template, "self-hosted", env)
+    assert result.returncode != 0
+    assert "public" not in result.stderr
+    assert "variable set" not in log.read_text()

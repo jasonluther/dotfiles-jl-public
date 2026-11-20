@@ -19,7 +19,10 @@ fi
 
 case "$1" in
   self-hosted)
-    if [[ "$(gh repo view --json isPrivate --jq .isPrivate)" != "true" ]]; then
+    # Assigned on its own line so a gh failure (not logged in, no remote)
+    # stops the script under set -e instead of reading as "public".
+    is_private="$(gh repo view --json isPrivate --jq .isPrivate)"
+    if [[ "$is_private" != "true" ]]; then
       echo "Error: this repo is public. Public repos run CI on GitHub-hosted" >&2
       echo "runners only; RUNS_ON is not set (the workflows ignore it there)." >&2
       exit 1

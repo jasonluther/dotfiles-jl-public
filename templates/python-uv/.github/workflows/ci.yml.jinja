@@ -18,6 +18,8 @@ env:
   # (scripts/set-runner.sh) to run PR workflows on the local macOS runner
   # pool. It applies only while the repo is private: a public repo, a
   # push to main and a Dependabot PR always use GitHub-hosted ubuntu-latest.
+  # Fork PRs in a private repo do use it: only people with read access can
+  # fork a private repo, and it runs fork PRs only if that setting is on.
   IS_SELF_HOSTED: ${{ '{{' }} (github.event.repository.private && github.event_name != 'push' && github.actor != 'dependabot[bot]' && vars.RUNS_ON == 'self-hosted') {{ '}}' }}
 
 jobs:
