@@ -101,8 +101,7 @@ def _parse_org_list(text):
     """Parse org logins: comma/whitespace-separated, '#' comments ignored."""
     orgs = []
     for line in text.splitlines():
-        for tok in line.split("#", 1)[0].replace(",", " ").split():
-            orgs.append(tok)
+        orgs.extend(line.split("#", 1)[0].replace(",", " ").split())
     return orgs
 
 
@@ -168,6 +167,7 @@ def clone_repo(name, url, dest):
     print(f"  Cloning {name}...")
     subprocess.run(
         ["gh", "repo", "clone", url, str(dest)],
+        check=False,
         capture_output=True,
         text=True,
         timeout=NET_TIMEOUT,
@@ -178,6 +178,7 @@ def pull_repo(name, dest):
     """Pull latest changes for an existing repo."""
     result = subprocess.run(
         ["git", "-C", str(dest), "pull", "--ff-only"],
+        check=False,
         capture_output=True,
         text=True,
         timeout=NET_TIMEOUT,
@@ -637,6 +638,7 @@ def sanitized_hostname():
     try:
         raw = subprocess.run(
             ["scutil", "--get", "LocalHostName"],
+            check=False,
             capture_output=True,
             text=True,
         ).stdout.strip()
