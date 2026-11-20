@@ -46,3 +46,6 @@ After the GitHub repo exists:
 ./scripts/set-runner.sh self-hosted   # local macOS runner pool
 ./scripts/set-runner.sh github        # ubuntu-latest
 ```
+
+Self-hosted applies only while the repo is private; a public repo always runs
+on GitHub-hosted runners, and the script refuses to set it there.
