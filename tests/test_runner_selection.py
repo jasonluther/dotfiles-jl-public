@@ -98,6 +98,7 @@ def _set_runner(template, choice, env):
     return subprocess.run(
         ["bash", str(ROOT / f"templates/{template}/scripts/set-runner.sh"), choice],
         env=env,
+        check=False,
         capture_output=True,
         text=True,
     )

@@ -133,6 +133,7 @@ def resolve_one(conflict: Path, repo: Path, dry_run: bool) -> tuple[str, str]:
 def fsck(repo: Path) -> str:
     r = subprocess.run(
         ["git", "-C", str(repo), "fsck", "--no-progress"],
+        check=False,
         capture_output=True,
         text=True,
     )
