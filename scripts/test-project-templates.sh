@@ -70,6 +70,9 @@ run_one() {
       npm install
     fi
     uv run pre-commit install
+    # git-identity checks this machine's git identity, not the template, and
+    # refuses the throwaway smoke@example.com above (CI's lint job skips it too).
+    export SKIP=git-identity
     git add -A
     uv run pre-commit run --all-files || true
     git add -A

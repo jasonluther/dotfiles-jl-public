@@ -21,7 +21,7 @@ jobs:
   # Refuse private terms (the DATA_LEAK_DENYLIST secret) in this event's commits: added lines, file
   # paths, commit messages and authors.
   data-leak-check:
-    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event.repository.private && vars.RUNS_ON) || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
