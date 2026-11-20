@@ -396,6 +396,31 @@ def snapshot_commit(dest, message):
             pass
 
 
+def origin_has_real_branch(dest):
+    """True when origin already holds a branch other than wip/*.
+
+    GitHub makes the first branch pushed to an empty repo its default, so a
+    wip push into a just-created repo would become the default branch (and
+    PRs would target it). Checks the local remote-tracking refs first, so the
+    usual case costs no network call; only a repo with nothing fetched yet
+    asks origin directly.
+    """
+    local = _git(dest, ["for-each-ref", "--format=%(refname)", "refs/remotes/origin/"])
+    refs = local.stdout.split()
+    if any(
+        not r.startswith("refs/remotes/origin/wip/") and r != "refs/remotes/origin/HEAD"
+        for r in refs
+    ):
+        return True
+    remote = _git(dest, ["ls-remote", "--heads", "origin"])
+    if remote.returncode != 0:
+        return False
+    heads = [
+        line.split("\t", 1)[1] for line in remote.stdout.splitlines() if "\t" in line
+    ]
+    return any(not h.startswith("refs/heads/wip/") for h in heads)
+
+
 def push_wip(name, dest, hostname):
     """Push a snapshot of working state to wip/<hostname> on origin.
 
@@ -414,6 +439,10 @@ def push_wip(name, dest, hostname):
 
     if _git(dest, ["symbolic-ref", "-q", "HEAD"]).returncode != 0:
         return  # detached HEAD
+
+    if not origin_has_real_branch(dest):
+        print(f"  {name}: skipping wip (origin has no branch yet; push one first)")
+        return
 
     branch = f"wip/{hostname}{wip_ref_suffix(dest)}"
     snap = snapshot_commit(dest, f"wip snapshot ({hostname})")

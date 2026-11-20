@@ -157,6 +157,46 @@ def test_push_wip_clean_synced_is_noop(tmp_path):
     assert before == after
 
 
+def test_push_wip_skips_empty_origin(tmp_path):
+    # A just-created remote: a wip push would become its default branch.
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    r = init_repo(tmp_path / "r", origin=bare)
+    commit_file(r, "a.txt", "hello")
+    (r / "wip_new.txt").write_text("in progress")
+    sg.push_wip("r", r, "hostx")
+    assert git(bare, "for-each-ref", "refs/heads/").stdout.strip() == ""
+
+
+def test_push_wip_skips_origin_with_only_wip_branches(tmp_path):
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    r = init_repo(tmp_path / "r", origin=bare)
+    commit_file(r, "a.txt", "hello")
+    git(r, "push", "-q", "origin", "HEAD:refs/heads/wip/otherhost")
+    (r / "wip_new.txt").write_text("in progress")
+    sg.push_wip("r", r, "hostx")
+    heads = git(
+        bare, "for-each-ref", "--format=%(refname)", "refs/heads/"
+    ).stdout.split()
+    assert heads == ["refs/heads/wip/otherhost"]
+
+
+def test_push_wip_proceeds_once_main_pushed_without_fetch(tmp_path):
+    # Pushed main but never fetched: no local origin refs, so origin is asked.
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    r = init_repo(tmp_path / "r", origin=bare)
+    commit_file(r, "a.txt", "hello")
+    git(
+        bare, "fetch", "-q", str(r), "main:main"
+    )  # main lands without a local origin/main
+    assert git(r, "for-each-ref", "refs/remotes/").stdout.strip() == ""
+    (r / "wip_new.txt").write_text("in progress")
+    sg.push_wip("r", r, "hostx")
+    assert "wip_new.txt" in ls_tree_files(bare, "refs/heads/wip/hostx")
+
+
 def test_push_wip_skips_detached_head(tmp_path):
     bare = tmp_path / "origin.git"
     git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
