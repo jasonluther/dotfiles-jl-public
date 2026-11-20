@@ -2,7 +2,10 @@
 
 import importlib.machinery
 import importlib.util
+import io
 from pathlib import Path
+
+import pytest
 
 FIX_URL_SRC = (
     Path(__file__).resolve().parent.parent / "dot_local/bin/executable_fix-url"
@@ -108,3 +111,35 @@ def test_extract_no_url_returns_text():
 
 def test_extract_clean_url_is_unchanged():
     assert fix_url.extract(CLEAN) == CLEAN
+
+
+def _main(monkeypatch, text, *argv):
+    """Run main() on piped *text*; return (opened, copied, exit message)."""
+    opened, copied = [], []
+    monkeypatch.setattr(fix_url.sys, "argv", ["fix-url", *argv])
+    monkeypatch.setattr(fix_url.sys, "stdin", io.StringIO(text))
+    monkeypatch.setattr(fix_url, "open_browser", opened.append)
+    monkeypatch.setattr(fix_url, "write_clipboard", copied.append)
+    try:
+        fix_url.main()
+    except SystemExit as e:
+        return opened, copied, str(e.code)
+    return opened, copied, None
+
+
+def test_main_opens_and_copies_the_cleaned_url(monkeypatch):
+    assert _main(monkeypatch, f"({WRAPPED})") == ([CLEAN], [CLEAN], None)
+
+
+@pytest.mark.parametrize(
+    "text", ["rm -rf ~", "file:///etc/passwd", "javascript:alert(1)", "   \n"]
+)
+def test_main_refuses_to_open_or_copy_anything_that_is_not_a_web_url(monkeypatch, text):
+    opened, copied, error = _main(monkeypatch, text)
+    assert (opened, copied) == ([], [])
+    assert error and error.startswith("fix-url:")
+
+
+def test_print_mode_does_not_open_the_browser(monkeypatch, capsys):
+    assert _main(monkeypatch, WRAPPED, "-p") == ([], [CLEAN], None)
+    assert capsys.readouterr().out.strip() == CLEAN
