@@ -195,3 +195,19 @@ def test_apply_from_worktree_bundle(tmp_path, monkeypatch):
     assert "hostA" in snaps
     assert wip.cmd_apply("hostB", "hostA", force=False) == 0
     assert (B / "wt_wip.txt").read_text() == "from A's worktree"
+
+
+def test_own_host_bundle_excluded(tmp_path, monkeypatch):
+    # A bundle this host wrote (Syncthing carries it to every machine, this one
+    # included) is this host's own state — never offered back to it.
+    home = tmp_path / "A"
+    A = init_repo(home / "proj" / "myrepo")
+    commit_file(A, "a.txt", "hello")
+    (A / "wipfile.txt").write_text("from A")
+    bundles = tmp_path / "bundles"
+    monkeypatch.setenv("HOME", str(home))
+    sg.bundle_wip("myrepo", A, "hostA", bundles)
+    monkeypatch.setattr(wip, "WIP_BUNDLE_DIR", bundles)
+    monkeypatch.chdir(A)
+    assert wip.gather_snapshots("hostA") == {}
+    assert "hostA" in wip.gather_snapshots("hostB")
