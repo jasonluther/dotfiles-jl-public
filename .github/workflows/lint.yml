@@ -5,17 +5,22 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: lint-${{ github.ref }}
   cancel-in-progress: true
 
-# Self-hosted toggle: set vars.RUNS_ON to 'self-hosted' to route to local runners.
-#   gh variable set RUNS_ON --body 'self-hosted' -R jasonluther/dotfiles-jl-public
-#   gh variable set RUNS_ON --body 'ubuntu-latest' -R jasonluther/dotfiles-jl-public  # revert
+# Self-hosted toggle: vars.RUNS_ON names the runner label (currently 'Linux').
+#   gh variable set RUNS_ON --body 'Linux' -R jasonluther/dotfiles-jl-public
+#   gh variable delete RUNS_ON -R jasonluther/dotfiles-jl-public  # revert to hosted
+# This repo is public: pull requests from forks always run on GitHub-hosted
+# runners, never on the owner's machines, whatever RUNS_ON says.
 
 jobs:
   lint:
-    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event.pull_request.head.repo.fork && 'ubuntu-latest') || vars.RUNS_ON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -48,16 +53,9 @@ jobs:
           sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Install trufflehog
-        run: |
-          install -d "$HOME/.local/bin"
-          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
-            | sh -s -- -b "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
       - name: pre-commit
         env:
-          SKIP: trailing-whitespace,end-of-file-fixer,check-yaml,check-json,check-toml,check-merge-conflict,detect-private-key,trufflehog
+          SKIP: trailing-whitespace,end-of-file-fixer,check-yaml,check-json,check-toml,check-merge-conflict,detect-private-key,secret-scan,git-identity,data-leak-check,shellcheck,actionlint,pinned
         run: pre-commit run --all-files --show-diff-on-failure --color=always
 
       - name: ruff (shebang Python scripts only)
@@ -95,5 +93,27 @@ jobs:
             zsh -n "$f"
           done
 
-      - name: trufflehog (full history)
-        run: trufflehog git --no-update --results=verified,unverified --fail file://.
+      # Shared kilotronic tools. These check the commits this push or pull
+      # request brings in, so the matching local hooks are skipped above.
+      - name: Secret scan (kilotronic/secret-scan)
+        uses: kilotronic/secret-scan@006556b813fd5054d7da8575d3928c5ad3583535 # v1.1.0
+
+      - name: Shell, workflow and pin lint (kilotronic/lint)
+        uses: kilotronic/lint@50d58c6fc3916432a60d6caf5914d5bb83a60a16 # v1.1.0
+        with:
+          # Same shellcheck exclusions as .pre-commit-config.yaml: zsh files,
+          # chezmoi templates, and Python hooks deployed under .sh names.
+          exclude: >-
+            .chezmoiscripts/** dot_config/shell/** dot_zshrc dot_zprofile
+            private_dot_claude/hooks/**
+
+      - name: Commit authors (kilotronic/git-identity)
+        uses: kilotronic/git-identity@76223f8d531904185d4bd46f66c65849cf0133f7 # v2.2.0
+
+      - name: Private terms (kilotronic/data-leak-check)
+        uses: kilotronic/data-leak-check@f1da8a7ce76bfaabd70ea815d9417fb691e95799 # v1.1.0
+        with:
+          denylist: ${{ secrets.DATA_LEAK_DENYLIST }}
+          # Forks and Dependabot get no Actions secrets: let them through here;
+          # the push to main checks the merged commits with the list.
+          if-empty: ${{ (github.event.pull_request.head.repo.fork || github.actor == 'dependabot[bot]') && 'skip' || 'fail' }}
