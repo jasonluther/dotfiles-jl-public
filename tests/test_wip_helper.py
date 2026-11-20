@@ -7,12 +7,9 @@ from pathlib import Path
 
 import pytest
 
-SG_SRC = Path(
-    "/Users/jason/Code/gh/public/dotfiles-jl-public/dot_local/bin/executable_sync-gh.py"
-)
-WIP_SRC = Path(
-    "/Users/jason/Code/gh/public/dotfiles-jl-public/dot_local/bin/executable_wip"
-)
+BIN = Path(__file__).resolve().parents[1] / "dot_local" / "bin"
+SG_SRC = BIN / "executable_sync-gh.py"
+WIP_SRC = BIN / "executable_wip"
 
 
 def _load(name, path):
