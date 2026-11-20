@@ -18,18 +18,6 @@ concurrency:
 # owner's machines. This repo is public, so RUNS_ON is ignored here.
 
 jobs:
-  # Refuse private terms (the DATA_LEAK_DENYLIST secret) in this event's commits: added lines, file
-  # paths, commit messages and authors.
-  data-leak-check:
-    runs-on: ${{ (github.event.repository.private && vars.RUNS_ON) || 'ubuntu-latest' }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: kilotronic/data-leak-check@f1da8a7ce76bfaabd70ea815d9417fb691e95799 # v1.1.0
-        with:
-          denylist: ${{ secrets.DATA_LEAK_DENYLIST }}
-
   lint:
     runs-on: ${{ (github.event.repository.private && vars.RUNS_ON) || 'ubuntu-latest' }}
     steps:
@@ -121,6 +109,8 @@ jobs:
       - name: Commit authors (kilotronic/git-identity)
         uses: kilotronic/git-identity@76223f8d531904185d4bd46f66c65849cf0133f7 # v2.2.0
 
+      # Refuse private terms (the DATA_LEAK_DENYLIST secret) in this event's commits: added lines,
+      # file paths, commit messages and authors.
       - name: Private terms (kilotronic/data-leak-check)
         uses: kilotronic/data-leak-check@f1da8a7ce76bfaabd70ea815d9417fb691e95799 # v1.1.0
         with:
