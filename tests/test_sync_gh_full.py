@@ -109,18 +109,9 @@ def test_snapshot_leaves_the_real_index_alone(tmp_path):
     r = tmp_path / "r"
     r.mkdir()
     git(r, "init", "-q", "-b", "main")
-    git(
-        r,
-        "-c",
-        "user.name=t",
-        "-c",
-        "user.email=t@t.test",
-        "commit",
-        "-q",
-        "--allow-empty",
-        "-m",
-        "c",
-    )
+    git(r, "config", "user.name", "t")
+    git(r, "config", "user.email", "t@t.test")
+    git(r, "commit", "-q", "--allow-empty", "-m", "c")
     (r / "staged.txt").write_text("staged")
     git(r, "add", "staged.txt")
     (r / "loose.txt").write_text("not staged")
