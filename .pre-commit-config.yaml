@@ -5,6 +5,9 @@
 # Note: the templates under templates/ have their own pre-commit-config.yaml.jinja
 # rendered into scaffolded projects; this file is for the dotfiles repo itself.
 
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+default_stages: [pre-commit]
+
 exclude: |
   (?x)^(
     \.git/|
@@ -29,27 +32,41 @@ repos:
       - id: check-merge-conflict
       - id: detect-private-key
 
-  - repo: https://github.com/trufflesecurity/trufflehog
-    rev: v3.95.9
+  # Shared kilotronic tools, pinned to release commits. CI runs the same
+  # tools as Actions in .github/workflows/lint.yml.
+  - repo: https://github.com/kilotronic/secret-scan
+    rev: 006556b813fd5054d7da8575d3928c5ad3583535 # v1.1.0
     hooks:
-      - id: trufflehog
-        entry: trufflehog git file://. --max-depth=1 --results=verified,unverified --fail
-        stages: [pre-commit]
+      - id: secret-scan # pre-commit: the staged changes (gitleaks)
+      - id: secret-scan-push # pre-push: the commits being pushed
 
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.11.0.1
+  - repo: https://github.com/kilotronic/git-identity
+    rev: 76223f8d531904185d4bd46f66c65849cf0133f7 # v2.2.0
+    hooks:
+      - id: git-identity
+        fail_fast: true
+
+  # Reads the denylist from ~/.config/data-leak-check/denylist (never in this repo).
+  - repo: https://github.com/kilotronic/data-leak-check
+    rev: f1da8a7ce76bfaabd70ea815d9417fb691e95799 # v1.1.0
+    hooks:
+      - id: data-leak-check # pre-commit: staged changes and the commit's identity
+      - id: data-leak-check-commit-msg # commit-msg: the message
+      - id: data-leak-check-pre-push # pre-push: the commits being pushed
+
+  - repo: https://github.com/kilotronic/lint
+    rev: 50d58c6fc3916432a60d6caf5914d5bb83a60a16 # v1.1.0
     hooks:
       - id: shellcheck
-        args: [-x, -e, SC1091]
-        # Same exclusions as the CI shellcheck job.
-        exclude: |
-          (?x)^(
-            \.chezmoiscripts/|
-            dot_config/shell/|
-            dot_zshrc$|
-            dot_zprofile$|
-            private_dot_claude/hooks/
-          )
+        # zsh files, chezmoi templates, and Python hooks deployed under .sh names.
+        args:
+          - --exclude=.chezmoiscripts/**
+          - --exclude=dot_config/shell/**
+          - --exclude=dot_zshrc
+          - --exclude=dot_zprofile
+          - --exclude=private_dot_claude/hooks/**
+      - id: actionlint
+      - id: pinned
 
   - repo: https://github.com/scop/pre-commit-shfmt
     rev: v3.13.1-1
@@ -75,11 +92,6 @@ repos:
       - id: markdownlint
         args: [--config, dot_markdownlintrc]
         exclude: "^(templates/|private_dot_claude/)"
-
-  - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.12
-    hooks:
-      - id: actionlint
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.21

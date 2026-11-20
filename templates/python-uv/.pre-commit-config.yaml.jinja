@@ -2,6 +2,10 @@
 # Pre-commit is the primary quality gate: heavy checks (full test suite, license check)
 # run in pre-commit so CI rarely fails. CI runs the same hooks via
 # `pre-commit run --all-files` with the slow ones SKIP-listed.
+# Install: `pre-commit install` (installs the pre-commit and pre-push hooks).
+
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -18,12 +22,25 @@ repos:
       - id: debug-statements
       - id: detect-private-key
 
-  - repo: https://github.com/trufflesecurity/trufflehog
-    rev: v3.95.2
+  # Shared kilotronic tools, pinned to release commits.
+  - repo: https://github.com/kilotronic/secret-scan
+    rev: 006556b813fd5054d7da8575d3928c5ad3583535 # v1.1.0
     hooks:
-      - id: trufflehog
-        entry: trufflehog git file://. --max-depth=1 --results=verified,unverified,unknown --exclude-paths=.trufflehog-exclude.txt --fail
-        stages: [pre-commit]
+      - id: secret-scan # pre-commit: the staged changes (gitleaks)
+      - id: secret-scan-push # pre-push: the commits being pushed
+
+  - repo: https://github.com/kilotronic/git-identity
+    rev: 76223f8d531904185d4bd46f66c65849cf0133f7 # v2.2.0
+    hooks:
+      - id: git-identity
+        fail_fast: true
+
+  - repo: https://github.com/kilotronic/lint
+    rev: 50d58c6fc3916432a60d6caf5914d5bb83a60a16 # v1.1.0
+    hooks:
+      - id: shellcheck
+      - id: actionlint
+      - id: pinned
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.12
@@ -65,11 +82,12 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      # Checks the project's own environment (.venv, from `uv sync --group dev`).
+      # A package with no license metadata (UNKNOWN) is not on the list, so it fails.
       - id: pip-licenses
         name: License compliance check
-        entry: pip-licenses --allow-only="Apache-2.0;Apache Software License;MIT;MIT License;BSD;BSD License;BSD-2-Clause;BSD-3-Clause;Python Software Foundation;Python Software Foundation License;PSF-2.0;ISC License;ISC License (ISCL);Mozilla Public License 2.0;Mozilla Public License 2.0 (MPL 2.0);Unlicense;The Unlicense;The Unlicense (Unlicense);MIT AND Python-2.0;Proprietary;UNKNOWN"
-        language: python
+        entry: .venv/bin/pip-licenses --allow-only="Apache-2.0;Apache Software License;MIT;MIT License;BSD;BSD License;BSD-2-Clause;BSD-3-Clause;Python Software Foundation;Python Software Foundation License;PSF-2.0;ISC License;ISC License (ISCL);Mozilla Public License 2.0;Mozilla Public License 2.0 (MPL 2.0);Unlicense;The Unlicense;The Unlicense (Unlicense);MIT AND Python-2.0;Apache-2.0 OR BSD-2-Clause"
+        language: system
         files: (pyproject\.toml|uv\.lock)$
         pass_filenames: false
         stages: [pre-commit]
-        additional_dependencies: [pip-licenses>=4.0.0]
