@@ -2,7 +2,10 @@
 
 import importlib.machinery
 import importlib.util
+import io
 from pathlib import Path
+
+import pytest
 
 FIX_CMD_SRC = (
     Path(__file__).resolve().parent.parent / "dot_local/bin/executable_fix-cmd"
@@ -52,3 +55,39 @@ def test_clean_single_line_unchanged():
 def test_clean_empty_and_bang_only():
     assert fix_cmd.clean("") == ""
     assert fix_cmd.clean("  !  \n") == ""
+
+
+def _main(monkeypatch, argv, key):
+    """Run main() on piped input with one fake keypress; return the exec'd argv, or None if aborted."""
+    ran = []
+
+    def read_key():
+        if key is None:
+            raise AssertionError("asked for a key")
+        return key
+
+    monkeypatch.setenv("SHELL", "/bin/sh")
+    monkeypatch.setattr(fix_cmd.sys, "argv", ["fix-cmd", *argv])
+    monkeypatch.setattr(fix_cmd.sys, "stdin", io.StringIO("! rm -rf build\n"))
+    monkeypatch.setattr(fix_cmd, "read_key", read_key)
+    monkeypatch.setattr(fix_cmd.os, "execv", lambda shell, args: ran.append(args))
+    try:
+        fix_cmd.main()
+    except SystemExit as e:
+        assert "aborted" in str(e.code)
+        assert ran == []
+        return None
+    return ran[0]
+
+
+def test_main_runs_the_cleaned_command_only_after_y(monkeypatch):
+    assert _main(monkeypatch, [], "y") == ["/bin/sh", "-c", "rm -rf build"]
+
+
+@pytest.mark.parametrize("key", ["n", "Y", "\n", " ", "\x1b"])
+def test_main_aborts_on_any_other_key(monkeypatch, key):
+    assert _main(monkeypatch, [], key) is None
+
+
+def test_force_runs_without_asking(monkeypatch):
+    assert _main(monkeypatch, ["-f"], None) == ["/bin/sh", "-c", "rm -rf build"]

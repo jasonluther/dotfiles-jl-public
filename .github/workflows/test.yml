@@ -1,0 +1,56 @@
+name: Test
+
+# The scripts' own tests: pytest suites under tests/, the chezmoi regression
+# scripts, and a render-and-check of each copier template flavour.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+
+      - name: pytest
+        run: uvx pytest -q tests
+
+      - name: Install chezmoi
+        run: |
+          sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: chezmoi regression scripts
+        run: |
+          bash scripts/test-chezmoi-identity-skip-ci.sh
+          bash scripts/test-chezmoi-lint-isolate.sh
+
+  templates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+
+      - name: Install copier, pre-commit and vale
+        run: |
+          uv tool install copier
+          uv tool install pre-commit
+          uv tool install vale
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Render each template flavour and run its hooks
+        run: |
+          git config --global user.name ci
+          git config --global user.email ci@example.com
+          bash scripts/test-project-templates.sh

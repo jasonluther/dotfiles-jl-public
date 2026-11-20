@@ -7,12 +7,9 @@ from pathlib import Path
 
 import pytest
 
-SG_SRC = Path(
-    "/Users/jason/Code/gh/public/dotfiles-jl-public/dot_local/bin/executable_sync-gh.py"
-)
-WIP_SRC = Path(
-    "/Users/jason/Code/gh/public/dotfiles-jl-public/dot_local/bin/executable_wip"
-)
+BIN = Path(__file__).resolve().parents[1] / "dot_local" / "bin"
+SG_SRC = BIN / "executable_sync-gh.py"
+WIP_SRC = BIN / "executable_wip"
 
 
 def _load(name, path):
@@ -60,7 +57,7 @@ def test_apply_from_bundle(tmp_path, monkeypatch):
     # Model two machines with the SAME repo path relative to $HOME, so the
     # path-derived bundle key matches across them (as it does on the real fleet).
     bare = tmp_path / "o.git"
-    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", "--bare", str(bare)], check=True)
     home_a, home_b = tmp_path / "A", tmp_path / "B"
     A = init_repo(home_a / "proj" / "myrepo", origin=bare)
     commit_file(A, "a.txt", "hello")
@@ -82,7 +79,7 @@ def test_apply_from_bundle(tmp_path, monkeypatch):
 
 def test_apply_from_pushed_branch(tmp_path, monkeypatch):
     bare = tmp_path / "o.git"
-    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", "--bare", str(bare)], check=True)
     A = init_repo(tmp_path / "hostA" / "myrepo", origin=bare)
     commit_file(A, "a.txt", "hello")
     git(A, "push", "-q", "origin", "main")
@@ -100,7 +97,7 @@ def test_apply_from_pushed_branch(tmp_path, monkeypatch):
 
 def test_apply_refuses_dirty_tree(tmp_path, monkeypatch):
     bare = tmp_path / "o.git"
-    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", "--bare", str(bare)], check=True)
     A = init_repo(tmp_path / "hostA" / "myrepo", origin=bare)
     commit_file(A, "a.txt", "hello")
     git(A, "push", "-q", "origin", "main")
@@ -121,7 +118,7 @@ def test_apply_refuses_dirty_tree(tmp_path, monkeypatch):
 
 def test_own_host_excluded(tmp_path, monkeypatch):
     bare = tmp_path / "o.git"
-    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", "--bare", str(bare)], check=True)
     A = init_repo(tmp_path / "hostA" / "myrepo", origin=bare)
     commit_file(A, "a.txt", "hello")
     git(A, "push", "-q", "origin", "main")
@@ -138,7 +135,7 @@ def test_worktree_snapshot_listed_and_applies(tmp_path, monkeypatch):
     # A worktree on hostA pushes wip/hostA@myrepo-fix; hostB sees that token
     # and can apply it like any other snapshot.
     bare = tmp_path / "o.git"
-    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", "--bare", str(bare)], check=True)
     A = init_repo(tmp_path / "hostA" / "myrepo", origin=bare)
     commit_file(A, "a.txt", "hello")
     git(A, "push", "-q", "origin", "main")
@@ -160,7 +157,7 @@ def test_worktree_snapshot_listed_and_applies(tmp_path, monkeypatch):
 def test_own_worktree_snapshot_excluded(tmp_path, monkeypatch):
     # wip/hostA@somewt is still hostA's own state — never offered back to hostA.
     bare = tmp_path / "o.git"
-    subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", "--bare", str(bare)], check=True)
     A = init_repo(tmp_path / "hostA" / "myrepo", origin=bare)
     commit_file(A, "a.txt", "hello")
     git(A, "push", "-q", "origin", "main")
@@ -198,3 +195,19 @@ def test_apply_from_worktree_bundle(tmp_path, monkeypatch):
     assert "hostA" in snaps
     assert wip.cmd_apply("hostB", "hostA", force=False) == 0
     assert (B / "wt_wip.txt").read_text() == "from A's worktree"
+
+
+def test_own_host_bundle_excluded(tmp_path, monkeypatch):
+    # A bundle this host wrote (Syncthing carries it to every machine, this one
+    # included) is this host's own state — never offered back to it.
+    home = tmp_path / "A"
+    A = init_repo(home / "proj" / "myrepo")
+    commit_file(A, "a.txt", "hello")
+    (A / "wipfile.txt").write_text("from A")
+    bundles = tmp_path / "bundles"
+    monkeypatch.setenv("HOME", str(home))
+    sg.bundle_wip("myrepo", A, "hostA", bundles)
+    monkeypatch.setattr(wip, "WIP_BUNDLE_DIR", bundles)
+    monkeypatch.chdir(A)
+    assert wip.gather_snapshots("hostA") == {}
+    assert "hostA" in wip.gather_snapshots("hostB")
