@@ -12,15 +12,14 @@ concurrency:
   group: lint-${{ github.ref }}
   cancel-in-progress: true
 
-# Self-hosted toggle: vars.RUNS_ON names the runner label (currently 'Linux').
-#   gh variable set RUNS_ON --body 'Linux' -R jasonluther/dotfiles-jl-public
-#   gh variable delete RUNS_ON -R jasonluther/dotfiles-jl-public  # revert to hosted
-# This repo is public: pull requests from forks always run on GitHub-hosted
-# runners, never on the owner's machines, whatever RUNS_ON says.
+# Runner: vars.RUNS_ON (a self-hosted runner label) applies only while the
+# repo is private. A public repo always runs on GitHub-hosted ubuntu-latest,
+# which is free for public repos and keeps outside pull requests off the
+# owner's machines. This repo is public, so RUNS_ON is ignored here.
 
 jobs:
   lint:
-    runs-on: ${{ (github.event.pull_request.head.repo.fork && 'ubuntu-latest') || vars.RUNS_ON || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event.repository.private && vars.RUNS_ON) || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

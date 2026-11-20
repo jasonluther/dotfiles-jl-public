@@ -10,7 +10,6 @@ default_stages: [pre-commit]
 
 exclude: |
   (?x)^(
-    \.git/|
     \.ruff_cache/|
     templates/.*/scripts/   # template-internal scripts: belong to the scaffolded project
   )

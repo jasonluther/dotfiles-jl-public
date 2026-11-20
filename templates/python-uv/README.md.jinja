@@ -17,8 +17,9 @@ uv run pytest
 
 ## CI runner
 
-By default this repo uses GitHub-hosted runners. To use the local self-hosted
-runner pool:
+By default this repo uses GitHub-hosted runners. While the repo is private,
+it can use the local self-hosted runner pool instead (a public repo always
+runs on GitHub-hosted runners, and the script refuses to set it there):
 
 ```bash
 ./scripts/set-runner.sh self-hosted

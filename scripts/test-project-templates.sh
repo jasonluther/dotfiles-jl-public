@@ -58,8 +58,10 @@ run_one() {
   (
     cd "$dest"
     git init -q -b main
-    git config user.email "smoke@example.com"
-    git config user.name "smoke"
+    # The rendered project's git-identity hook refuses placeholder authors
+    # such as *@example.com, so use GitHub Actions' own noreply identity.
+    git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+    git config user.name "github-actions[bot]"
     mkdir -p src/smoke_test tests
     touch src/smoke_test/__init__.py
     printf 'def test_placeholder():\n    assert True\n' >tests/test_placeholder.py
