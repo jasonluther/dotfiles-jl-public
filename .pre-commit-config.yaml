@@ -14,6 +14,10 @@ exclude: |
     templates/.*/scripts/   # template-internal scripts: belong to the scaffolded project
   )
 
+# pre-commit installs these hook types; the other hooks stay at pre-commit only.
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+default_stages: [pre-commit]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -98,3 +102,10 @@ repos:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
+
+  - repo: https://github.com/kilotronic/data-leak-check
+    rev: f1da8a7ce76bfaabd70ea815d9417fb691e95799  # v1.1.0
+    hooks:
+      - id: data-leak-check            # pre-commit: staged changes and the commit's identity
+      - id: data-leak-check-commit-msg # commit-msg: the message
+      - id: data-leak-check-pre-push   # pre-push: the commits being pushed
