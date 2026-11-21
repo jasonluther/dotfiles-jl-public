@@ -32,8 +32,14 @@ if ! command -v gh >/dev/null 2>&1; then
   sudo apt-get install -y gh
 fi
 
+# Claude Code's official installer, saved to a file before it runs (never
+# piped). The installer checks the binary it downloads against the SHA-256 in
+# Anthropic's release manifest.
 if ! command -v claude >/dev/null 2>&1; then
-  curl -fsSL https://claude.ai/install.sh | bash
+  claude_installer="$(mktemp)"
+  curl -fsSL -o "$claude_installer" https://claude.ai/install.sh
+  bash "$claude_installer"
+  rm -f "$claude_installer"
 fi
 
 # Match macOS, where zsh is the default login shell. Without this the dotfiles'

@@ -1,12 +1,24 @@
 #!/usr/bin/env bash
-# Install tailscale via the official installer and enable the daemon.
+# Install tailscale from its signed apt repository and enable the daemon.
 # Bringing up the node (sudo tailscale up) is left as a manual step so
 # the operator can choose flags (--ssh, --advertise-tags, etc.).
 
 set -euo pipefail
 
+# Tailscale's apt repository, set up the way its installer does for
+# Debian and Ubuntu (a keyring plus a source list), so apt checks the
+# package signatures instead of a script running unchecked.
 if ! command -v tailscale >/dev/null 2>&1; then
-  curl -fsSL https://tailscale.com/install.sh | sh
+  # shellcheck source=/dev/null
+  . /etc/os-release
+  repo="https://pkgs.tailscale.com/stable/${ID}/${VERSION_CODENAME}"
+  sudo install -d -m 0755 /usr/share/keyrings
+  curl -fsSL "${repo}.noarmor.gpg" \
+    | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+  curl -fsSL "${repo}.tailscale-keyring.list" \
+    | sudo tee /etc/apt/sources.list.d/tailscale.list >/dev/null
+  sudo apt-get update -y
+  sudo apt-get install -y tailscale
 fi
 
 sudo systemctl enable --now tailscaled

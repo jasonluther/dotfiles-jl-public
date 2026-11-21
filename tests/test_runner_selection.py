@@ -2,7 +2,8 @@
 
 vars.RUNS_ON may send jobs to the owner's self-hosted runners, but only
 while the repository is private: a public repository's jobs (pull requests
-from strangers included) always land on ubuntu-latest. This covers this
+from strangers included) always land on ubuntu-latest. This repo's own lint
+job names ubuntu-latest outright. This covers this
 repo's own workflows and the copier templates' CI and set-runner.sh.
 """
 
@@ -42,13 +43,17 @@ def test_runs_on_is_used_only_while_private(path):
 
 
 def test_lint_workflow_runs_on():
+    """This repo is public: its lint job names ubuntu-latest outright.
+
+    kilotronic/lint's workflow-safety check refuses any vars.* runner for a
+    public repo's pull requests, even behind the private gate.
+    """
     lines = [
         line.strip()
         for line in (ROOT / ".github/workflows/lint.yml").read_text().splitlines()
         if line.strip().startswith("runs-on:")
     ]
-    gated = "runs-on: ${{ (github.event.repository.private && vars.RUNS_ON) || 'ubuntu-latest' }}"
-    assert lines and all(line == gated for line in lines), lines
+    assert lines and all(line == "runs-on: ubuntu-latest" for line in lines), lines
 
 
 TEMPLATE_GATE = (

@@ -27,6 +27,7 @@ set -euo pipefail
 # the GitHub username from the source's `origin` remote — so forks need no
 # additional editing for either to work.
 REPO="${REPO:-jasonluther/dotfiles-jl-public}"
+REF="${REF:-main}" # the branch or commit scripts/install-chezmoi.sh is fetched from
 EXPECTED_URL="https://github.com/$REPO"
 CHEZMOI_SRC="$HOME/.local/share/chezmoi"
 BIN_DIR="$HOME/.local/bin"
@@ -70,9 +71,21 @@ if ((is_darwin)); then
       echo "       The user '$(id -un)' must be an Administrator on this Mac." >&2
       exit 1
     fi
+    # The official installer at a pinned commit, checked before it runs. To
+    # upgrade, take Homebrew/install's latest commit and its install.sh's
+    # `shasum -a 256`.
     echo "==> Installing Homebrew..."
-    NONINTERACTIVE=1 /bin/bash -c \
-      "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    brew_installer_commit=c9c975046f78e6e6d662deb801bd461ebd6a54ed
+    brew_installer_sha256=8fd2f1a5287a7c2e3d7362924c677edcc04c5a0e16448c77132d056bc88cf1ed
+    brew_installer="$(mktemp)"
+    curl -fsSL -o "$brew_installer" \
+      "https://raw.githubusercontent.com/Homebrew/install/$brew_installer_commit/install.sh"
+    if [[ "$(shasum -a 256 "$brew_installer" | cut -d' ' -f1)" != "$brew_installer_sha256" ]]; then
+      echo "error: the Homebrew installer's checksum doesn't match; not running it." >&2
+      exit 1
+    fi
+    NONINTERACTIVE=1 /bin/bash "$brew_installer"
+    rm -f "$brew_installer"
     for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
       [[ -x "$candidate" ]] && brew_bin="$candidate" && break
     done
@@ -84,8 +97,13 @@ fi
 # Install chezmoi if missing. Use ~/.local/bin so we don't need sudo.
 if ! command -v chezmoi >/dev/null 2>&1 && [[ ! -x "$BIN_DIR/chezmoi" ]]; then
   echo "==> Installing chezmoi to $BIN_DIR..."
-  install -d -m 0755 "$BIN_DIR"
-  sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$BIN_DIR"
+  # The repo's own installer, from the same repo as this script: a pinned
+  # chezmoi release, checked against its SHA-256 before it is unpacked.
+  chezmoi_installer="$(mktemp)"
+  curl -fsSL -o "$chezmoi_installer" \
+    "https://raw.githubusercontent.com/$REPO/$REF/scripts/install-chezmoi.sh"
+  bash "$chezmoi_installer" "$BIN_DIR"
+  rm -f "$chezmoi_installer"
 fi
 export PATH="$BIN_DIR:$PATH"
 
