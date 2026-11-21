@@ -1,0 +1,23 @@
+#!/bin/sh
+# keys gh shim: agent sessions run gh as the kilotronic-agents App; everyone else, the real gh.
+# The real gh is the next gh on PATH after this file (Homebrew's, normally).
+self=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
+real=""
+IFS=:
+for d in $PATH; do
+  [ -x "$d/gh" ] && [ "$d/gh" != "$self" ] && [ "$(cd "$d" && pwd)/gh" != "$self" ] && {
+    real="$d/gh"
+    break
+  }
+done
+unset IFS
+[ -n "$real" ] || {
+  echo "gh: no real gh on PATH" >&2
+  exit 127
+}
+if [ -n "${CLAUDECODE:-}${AI_AGENT:-}" ]; then
+  : "${KEYS_GH_APP:=kilotronic-agents}" "${KEYS_GH_DEFAULT_OWNER:=jasonluther}"
+  export KEYS_GH_APP KEYS_GH_DEFAULT_OWNER
+  KEYS_REAL_GH="$real" exec keys gh -- "$@"
+fi
+exec "$real" "$@"
