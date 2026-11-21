@@ -10,7 +10,9 @@
 export KEYS_GH_DEFAULT_OWNER=jasonluther
 
 # Loaded from both .zshenv (every zsh, scripts included) and .zshrc: apply once.
-if [[ -n "${CLAUDECODE:-}${AI_AGENT:-}" && -z "${_KEYS_GIT_SET:-}" ]] && command -v keys &>/dev/null; then
+# Not gated on keys being installed: without it the helper fails and git stops, never
+# falling back to the owner's own login.
+if [[ -n "${CLAUDECODE:-}${AI_AGENT:-}" && -z "${_KEYS_GIT_SET:-}" ]]; then
   export _KEYS_GIT_SET=1
   # Reset github.com's helpers (an empty value clears the list), then ask keys, with the
   # repo path so it can pick the owner's installation.
