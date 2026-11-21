@@ -27,7 +27,9 @@ set -euo pipefail
 # the GitHub username from the source's `origin` remote — so forks need no
 # additional editing for either to work.
 REPO="${REPO:-jasonluther/dotfiles-jl-public}"
-REF="${REF:-main}" # the branch or commit scripts/install-chezmoi.sh is fetched from
+# The branch, tag or commit scripts/install-chezmoi.sh is downloaded from when
+# this script runs without a checkout beside it (the curl | wget one-liners).
+DOTFILES_REF="${DOTFILES_REF:-main}"
 EXPECTED_URL="https://github.com/$REPO"
 CHEZMOI_SRC="$HOME/.local/share/chezmoi"
 BIN_DIR="$HOME/.local/bin"
@@ -97,13 +99,20 @@ fi
 # Install chezmoi if missing. Use ~/.local/bin so we don't need sudo.
 if ! command -v chezmoi >/dev/null 2>&1 && [[ ! -x "$BIN_DIR/chezmoi" ]]; then
   echo "==> Installing chezmoi to $BIN_DIR..."
-  # The repo's own installer, from the same repo as this script: a pinned
-  # chezmoi release, checked against its SHA-256 before it is unpacked.
-  chezmoi_installer="$(mktemp)"
-  curl -fsSL -o "$chezmoi_installer" \
-    "https://raw.githubusercontent.com/$REPO/$REF/scripts/install-chezmoi.sh"
-  bash "$chezmoi_installer" "$BIN_DIR"
-  rm -f "$chezmoi_installer"
+  # The repo's own installer (a pinned chezmoi release, checked against its
+  # SHA-256 before it is unpacked): from this checkout when install.sh runs
+  # from one, otherwise downloaded from $REPO at $DOTFILES_REF.
+  # (Under `bash -c "$(curl ...)"` BASH_SOURCE is empty: no checkout.)
+  self="${BASH_SOURCE[0]:-}"
+  if [[ -n "$self" && -f "$self" && -f "$(dirname "$self")/scripts/install-chezmoi.sh" ]]; then
+    bash "$(dirname "$self")/scripts/install-chezmoi.sh" "$BIN_DIR"
+  else
+    chezmoi_installer="$(mktemp)"
+    curl -fsSL -o "$chezmoi_installer" \
+      "https://raw.githubusercontent.com/$REPO/$DOTFILES_REF/scripts/install-chezmoi.sh"
+    bash "$chezmoi_installer" "$BIN_DIR"
+    rm -f "$chezmoi_installer"
+  fi
 fi
 export PATH="$BIN_DIR:$PATH"
 

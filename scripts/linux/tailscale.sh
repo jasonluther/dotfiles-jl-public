@@ -11,7 +11,15 @@ set -euo pipefail
 if ! command -v tailscale >/dev/null 2>&1; then
   # shellcheck source=/dev/null
   . /etc/os-release
-  repo="https://pkgs.tailscale.com/stable/${ID}/${VERSION_CODENAME}"
+  # Ubuntu derivatives (Mint, Pop!_OS) use Ubuntu's repo by UBUNTU_CODENAME;
+  # Debian derivatives fall back to Debian's when their own ID has no repo.
+  if [[ -n "${UBUNTU_CODENAME:-}" ]]; then
+    repo="https://pkgs.tailscale.com/stable/ubuntu/${UBUNTU_CODENAME}"
+  elif [[ "$ID" == debian || "$ID" == ubuntu ]]; then
+    repo="https://pkgs.tailscale.com/stable/${ID}/${VERSION_CODENAME}"
+  else
+    repo="https://pkgs.tailscale.com/stable/debian/${VERSION_CODENAME}"
+  fi
   sudo install -d -m 0755 /usr/share/keyrings
   curl -fsSL "${repo}.noarmor.gpg" \
     | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
