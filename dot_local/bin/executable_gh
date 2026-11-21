@@ -1,5 +1,5 @@
 #!/bin/sh
-# keys gh shim: agent sessions run gh as the kilotronic-agents App; everyone else, the real gh.
+# keys gh shim: agent sessions run gh as the repo owner's App; everyone else, the real gh.
 # The real gh is the next gh on PATH after this file (Homebrew's, normally).
 self=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 real=""
@@ -16,8 +16,10 @@ unset IFS
   exit 127
 }
 if [ -n "${CLAUDECODE:-}${AI_AGENT:-}" ]; then
-  : "${KEYS_GH_APP:=kilotronic-agents}" "${KEYS_GH_DEFAULT_OWNER:=jasonluther}"
-  export KEYS_GH_APP KEYS_GH_DEFAULT_OWNER
+  # shellcheck source=/dev/null
+  [ -z "${KEYS_GH_APPS:-}" ] && [ -r "$HOME/.config/keys/apps.sh" ] && . "$HOME/.config/keys/apps.sh"
+  : "${KEYS_GH_DEFAULT_OWNER:=jasonluther}"
+  export KEYS_GH_APPS KEYS_GH_DEFAULT_OWNER
   KEYS_REAL_GH="$real" exec keys gh -- "$@"
 fi
 exec "$real" "$@"
