@@ -18,7 +18,6 @@ unset IFS
 if [ -n "${CLAUDECODE:-}${AI_AGENT:-}" ]; then
   # shellcheck source=/dev/null
   [ -z "${KEYS_GH_APPS:-}" ] && [ -r "$HOME/.config/keys/apps.sh" ] && . "$HOME/.config/keys/apps.sh"
-  : "${KEYS_GH_DEFAULT_OWNER:=jasonluther}"
   export KEYS_GH_APPS KEYS_GH_DEFAULT_OWNER
   KEYS_REAL_GH="$real" exec keys gh -- "$@"
 fi
