@@ -17,46 +17,58 @@ default_stages: [pre-commit]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
     hooks:
-      - id: trailing-whitespace
-        exclude: '\.terminal$'
-      - id: end-of-file-fixer
-        exclude: '\.terminal$'
-      - id: check-yaml
-        exclude: '\.tmpl$|\.jinja$'
-      - id: check-json
-        exclude: '\.tmpl$|\.jinja$|^\.chezmoitemplates/'
-      - id: check-toml
-        exclude: '\.tmpl$|\.jinja$'
-      - id: check-merge-conflict
       - id: detect-private-key
 
   # Shared kilotronic tools, pinned to release commits. CI runs the same
   # tools as Actions in .github/workflows/lint.yml.
   - repo: https://github.com/kilotronic/secret-scan
-    rev: 2665d6f2f0260d3ae0defbedcce27fc63ad6a168 # v1.2.1
+    rev: 2665d6f2f0260d3ae0defbedcce27fc63ad6a168 # frozen: v1.2.1
     hooks:
       - id: secret-scan # pre-commit: the staged changes (gitleaks)
       - id: secret-scan-push # pre-push: the commits being pushed
 
   - repo: https://github.com/kilotronic/git-identity
-    rev: 5a7b91c3194870cf535ba8c37a6c93b19b5a933b # v2.3.1
+    rev: b0d54e809d81cabf61d357cbe519a9b9263b17cb # frozen: v2.4.0
     hooks:
       - id: git-identity
         fail_fast: true
+      - id: session-trailer # commit-msg: no Claude-Session trailer (public repo)
 
   # Reads the denylist from ~/.config/data-leak-check/denylist (never in this repo).
   - repo: https://github.com/kilotronic/data-leak-check
-    rev: f1da8a7ce76bfaabd70ea815d9417fb691e95799 # v1.1.0
+    rev: f1da8a7ce76bfaabd70ea815d9417fb691e95799 # frozen: v1.1.0
     hooks:
       - id: data-leak-check # pre-commit: staged changes and the commit's identity
       - id: data-leak-check-commit-msg # commit-msg: the message
       - id: data-leak-check-pre-push # pre-push: the commits being pushed
 
+  # The format and lint bundle, with each tool's default configuration unless
+  # the repo has its own (ruff.toml here). markdownlint's bundle defaults match
+  # dot_markdownlintrc, so that file stays the deployed ~/.markdownlintrc only.
   - repo: https://github.com/kilotronic/lint
-    rev: 50d58c6fc3916432a60d6caf5914d5bb83a60a16 # v1.1.0
+    rev: 57c42f430af9a89607e32d1947714e2e594db6f3 # frozen: v1.2.0
     hooks:
+      # format-all: formatters, which rewrite files (first, so the linters see the result)
+      - id: ruff-format
+      - id: prettier
+        exclude: '^\.chezmoitemplates/' # Go templates, not plain JSON
+      - id: shfmt
+        # zsh files and chezmoi templates aren't bash; private_dot_claude/hooks/
+        # holds Python scripts deployed under .sh filenames (chezmoi target
+        # ~/.claude/hooks/*.sh), which shfmt would parse as bash and fail on.
+        exclude: |
+          (?x)^(
+            \.chezmoiscripts/|
+            dot_config/shell/|
+            dot_zshrc$|
+            dot_zprofile$|
+            private_dot_claude/hooks/
+          )
+      - id: taplo-format
+      # lint-all: linters
+      - id: ruff-check
       - id: shellcheck
         # zsh files, chezmoi templates, and Python hooks deployed under .sh names.
         args:
@@ -66,43 +78,23 @@ repos:
           - --exclude=dot_zprofile
           - --exclude=private_dot_claude/hooks/**
       - id: actionlint
-      - id: pinned
-
-  - repo: https://github.com/scop/pre-commit-shfmt
-    rev: v3.13.1-1
-    hooks:
-      - id: shfmt
-        args: [-i, "2", -ci, -bn, -d]
-        # private_dot_claude/hooks/ holds Python scripts deployed under .sh
-        # filenames (chezmoi target ~/.claude/hooks/*.sh); shfmt would parse
-        # them as bash and fail. CI's shfmt job filters by shebang so it
-        # avoids them naturally; this mirror is for local pre-commit.
-        exclude: |
-          (?x)^(
-            \.chezmoiscripts/|
-            dot_config/shell/|
-            dot_zshrc$|
-            dot_zprofile$|
-            private_dot_claude/hooks/
-          )
-
-  - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.50.0
-    hooks:
       - id: markdownlint
-        args: [--config, dot_markdownlintrc]
         exclude: "^(templates/|private_dot_claude/)"
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.17.5
-    hooks:
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
-      - id: ruff-format
-
-  - repo: https://github.com/kilotronic/data-leak-check
-    rev: f1da8a7ce76bfaabd70ea815d9417fb691e95799  # v1.1.0
-    hooks:
-      - id: data-leak-check            # pre-commit: staged changes and the commit's identity
-      - id: data-leak-check-commit-msg # commit-msg: the message
-      - id: data-leak-check-pre-push   # pre-push: the commits being pushed
+      - id: yamllint
+      - id: csv-lint
+      - id: check-json
+        exclude: '\.tmpl$|\.jinja$|^\.chezmoitemplates/'
+      - id: check-yaml
+        exclude: '\.tmpl$|\.jinja$'
+      - id: check-toml
+        exclude: '\.tmpl$|\.jinja$'
+      - id: end-of-file-fixer
+        exclude: '\.terminal$'
+      - id: trailing-whitespace
+        exclude: '\.terminal$'
+      - id: mixed-line-ending
+      - id: check-merge-conflict
+      # workflows, pins and containers
+      - id: pinned
+      - id: workflow-safety
+      - id: non-root

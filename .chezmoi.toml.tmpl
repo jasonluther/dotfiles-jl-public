@@ -16,7 +16,7 @@
 
   Non-TTY override:
     CHEZMOI_NAME='Jane Doe' CHEZMOI_EMAIL=jane@example.com \
-      sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply jasonluther/dotfiles-jl-public
+      bash -c "$(curl -fsSL https://raw.githubusercontent.com/jasonluther/dotfiles-jl-public/main/install.sh)"
 */ -}}
 
 {{- $src := .chezmoi.sourceDir -}}

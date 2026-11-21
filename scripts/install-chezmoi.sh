@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Install a pinned chezmoi release into a directory, checking the download's
+# SHA-256 before unpacking it (instead of piping get.chezmoi.io into a shell).
+#
+# Usage: scripts/install-chezmoi.sh <bin-dir>
+#
+# install.sh runs this file from its own checkout when there is one, and
+# otherwise downloads it from $REPO at $DOTFILES_REF (default main), so a fresh
+# machine and CI install the same checked binary. To upgrade, set VERSION and
+# copy these platforms' lines from that release's chezmoi_<version>_checksums.txt.
+
+set -euo pipefail
+
+VERSION=2.74.1
+checksum_for() {
+  case "$1" in
+    darwin_amd64) echo b2229c6ff9eb7d1f10d098aac94241da652dd7df989c7ef35df6777dbe00d397 ;;
+    darwin_arm64) echo fbc7b86c7b36eb0448e2a99a616b6d32f022d1f3895076ad44f4c5d65a77fe60 ;;
+    linux_amd64) echo ae01c66b1a6dbf563667c63fbbd9986b3cfa3c98dd266ddee732f63e8af2e9d1 ;;
+    linux_arm64) echo 8c62619c4303770342e7c7e75d168b6cc6efee4ad5e4b994980de7cf794d68e2 ;;
+    linux_armv6) echo 30c39166ed46e6fadba47c02bf910926e1181199c02dcde4e4a914249e93ace2 ;;
+    linux_i386) echo 4bb71990f8f07b737840e2712a3c35b1fc587917adf2def649589c84494e768c ;;
+    *) return 1 ;;
+  esac
+}
+
+bin_dir="${1:?usage: install-chezmoi.sh <bin-dir>}"
+
+case "$(uname -s)" in
+  Darwin) os=darwin ;;
+  Linux) os=linux ;;
+  *)
+    echo "error: unsupported OS $(uname -s)" >&2
+    exit 1
+    ;;
+esac
+case "$(uname -m)" in
+  x86_64 | amd64) arch=amd64 ;;
+  arm64 | aarch64) arch=arm64 ;;
+  armv6l | armv7l) arch=armv6 ;; # 32-bit Raspberry Pi: chezmoi ships no armv7 build
+  i386 | i686) arch=i386 ;;
+  *)
+    echo "error: unsupported CPU $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+platform="${os}_${arch}"
+expected="$(checksum_for "$platform")" || {
+  echo "error: no pinned chezmoi build for $platform" >&2
+  exit 1
+}
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+tarball="chezmoi_${VERSION}_${platform}.tar.gz"
+curl -fsSL -o "$tmp/$tarball" \
+  "https://github.com/twpayne/chezmoi/releases/download/v${VERSION}/${tarball}"
+
+if command -v sha256sum >/dev/null 2>&1; then
+  actual="$(sha256sum "$tmp/$tarball" | cut -d' ' -f1)"
+else
+  actual="$(shasum -a 256 "$tmp/$tarball" | cut -d' ' -f1)"
+fi
+if [[ "$actual" != "$expected" ]]; then
+  echo "error: $tarball checksum mismatch (expected $expected, got $actual)" >&2
+  exit 1
+fi
+
+tar -xzf "$tmp/$tarball" -C "$tmp" chezmoi
+install -d -m 0755 "$bin_dir"
+install -m 0755 "$tmp/chezmoi" "$bin_dir/chezmoi"
+echo "chezmoi $VERSION installed to $bin_dir"

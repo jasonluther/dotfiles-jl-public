@@ -83,7 +83,7 @@ apt-get update -qq
 apt-get install -y --no-install-recommends curl ca-certificates git sudo >/dev/null
 
 echo "==> install chezmoi"
-sh -c "$(curl -fsLS get.chezmoi.io)" -- -b /usr/local/bin
+bash /src/scripts/install-chezmoi.sh /usr/local/bin
 
 export CHEZMOI_NAME='Smoke Test'
 export CHEZMOI_EMAIL='smoke@test.local'

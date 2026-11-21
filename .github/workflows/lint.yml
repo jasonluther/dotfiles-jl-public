@@ -12,18 +12,19 @@ concurrency:
   group: lint-${{ github.ref }}
   cancel-in-progress: true
 
-# Runner: vars.RUNS_ON (a self-hosted runner label) applies only while the
-# repo is private. A public repo always runs on GitHub-hosted ubuntu-latest,
-# which is free for public repos and keeps outside pull requests off the
-# owner's machines. This repo is public, so RUNS_ON is ignored here.
+# Runner: GitHub-hosted ubuntu-latest, which is free for public repos and
+# keeps outside pull requests off the owner's machines. (kilotronic/lint's
+# workflow-safety check refuses a self-hosted or vars.* runner for a public
+# repo's pull requests.)
 
 jobs:
   lint:
-    runs-on: ${{ (github.event.repository.private && vars.RUNS_ON) || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
@@ -49,12 +50,12 @@ jobs:
 
       - name: Install chezmoi
         run: |
-          sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+          bash scripts/install-chezmoi.sh "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: pre-commit
         env:
-          SKIP: trailing-whitespace,end-of-file-fixer,check-yaml,check-json,check-toml,check-merge-conflict,detect-private-key,secret-scan,git-identity,data-leak-check,shellcheck,actionlint,pinned
+          SKIP: detect-private-key,secret-scan,git-identity,session-trailer,data-leak-check,shellcheck,actionlint,pinned,workflow-safety,non-root
         run: pre-commit run --all-files --show-diff-on-failure --color=always
 
       - name: ruff (shebang Python scripts only)
@@ -97,8 +98,8 @@ jobs:
       - name: Secret scan (kilotronic/secret-scan)
         uses: kilotronic/secret-scan@2665d6f2f0260d3ae0defbedcce27fc63ad6a168 # v1.2.1
 
-      - name: Shell, workflow and pin lint (kilotronic/lint)
-        uses: kilotronic/lint@50d58c6fc3916432a60d6caf5914d5bb83a60a16 # v1.1.0
+      - name: Shell, workflow, pin and container lint (kilotronic/lint)
+        uses: kilotronic/lint@57c42f430af9a89607e32d1947714e2e594db6f3 # v1.2.0
         with:
           # Same shellcheck exclusions as .pre-commit-config.yaml: zsh files,
           # chezmoi templates, and Python hooks deployed under .sh names.
@@ -106,8 +107,8 @@ jobs:
             .chezmoiscripts/** dot_config/shell/** dot_zshrc dot_zprofile
             private_dot_claude/hooks/**
 
-      - name: Commit authors (kilotronic/git-identity)
-        uses: kilotronic/git-identity@5a7b91c3194870cf535ba8c37a6c93b19b5a933b # v2.3.1
+      - name: Commit authors and session trailers (kilotronic/git-identity)
+        uses: kilotronic/git-identity@b0d54e809d81cabf61d357cbe519a9b9263b17cb # v2.4.0
 
       # Refuse private terms (the DATA_LEAK_DENYLIST secret) in this event's commits: added lines,
       # file paths, commit messages and authors.
