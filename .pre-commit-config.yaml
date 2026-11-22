@@ -48,7 +48,7 @@ repos:
   # the repo has its own (ruff.toml here). markdownlint's bundle defaults match
   # dot_markdownlintrc, so that file stays the deployed ~/.markdownlintrc only.
   - repo: https://github.com/kilotronic/lint
-    rev: b5343bfa69d890919c8774733da372d13d23d6d3 # frozen: v1.3.1
+    rev: 56a43d45e7b4479bba97c79404a4dc7671bd9796 # frozen: v1.3.2
     hooks:
       # format-all: formatters, which rewrite files (first, so the linters see the result)
       - id: ruff-format
