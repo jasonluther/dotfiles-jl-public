@@ -91,3 +91,38 @@ def test_main_aborts_on_any_other_key(monkeypatch, key):
 
 def test_force_runs_without_asking(monkeypatch):
     assert _main(monkeypatch, ["-f"], None) == ["/bin/sh", "-c", "rm -rf build"]
+
+
+def test_clean_keeps_separate_commands_on_separate_lines():
+    # A pasted multi-line snippet was joined into one broken command.
+    raw = (
+        "R=owner/repo\n"
+        "gh repo unarchive $R --yes\n"
+        'for b in a b; do echo "$b"; done\n'
+        "gh repo archive $R --yes\n"
+    )
+    assert fix_cmd.clean(raw, width=80) == raw.strip()
+
+
+def test_clean_rejoins_a_terminal_word_wrap():
+    # The terminal wrapped because "--yes" didn't fit in the 30 columns left.
+    raw = "gh repo unarchive owner/repo\n--yes\necho done\n"
+    assert (
+        fix_cmd.clean(raw, width=30) == "gh repo unarchive owner/repo --yes\necho done"
+    )
+
+
+def test_clean_rejoins_a_wrap_back_to_the_block_indent():
+    raw = "  gh api -X DELETE repos/o/r/git/refs/heads/x\n  --silent\n  echo ok\n"
+    assert fix_cmd.clean(raw, width=48) == (
+        "gh api -X DELETE repos/o/r/git/refs/heads/x --silent\necho ok"
+    )
+
+
+def test_clean_keeps_the_line_after_an_unwrapped_long_line():
+    # A copied code block keeps a long line whole; wider than the terminal means
+    # it was not wrapped there, so the next line is its own command.
+    long = "for b in " + "x" * 120 + "; do echo $b; done"
+    assert fix_cmd.clean(f"{long}\ngh repo archive o/r --yes\n", width=80) == (
+        f"{long}\ngh repo archive o/r --yes"
+    )
