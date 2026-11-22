@@ -57,8 +57,23 @@ case "$(uname -s)" in
     if ! command -v arduino-cli >/dev/null 2>&1; then
       echo "==> install arduino-cli to ~/.local/bin"
       install -d "$HOME/.local/bin"
-      curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh \
-        | BINDIR="$HOME/.local/bin" sh
+      # A pinned release, checksum checked (from the release's 1.6.0-checksums.txt), not install.sh piped
+      # into sh.
+      ver=1.6.0
+      case "$(uname -m)" in
+        x86_64) arch=64bit sha=321ee249f44c78053234fec0f36101092bc6021bf24939e15e0cc2449c5ed250 ;;
+        aarch64 | arm64) arch=ARM64 sha=2ed4e1436bb3be1265966af8eba95dd25e28f3a9f92d0a58d371ed14dbaf550f ;;
+        *)
+          echo "error: no arduino-cli build for $(uname -m)" >&2
+          exit 1
+          ;;
+      esac
+      tmp=$(mktemp)
+      trap 'rm -f "$tmp"' EXIT
+      curl -fsSL -o "$tmp" "https://github.com/arduino/arduino-cli/releases/download/v${ver}/arduino-cli_${ver}_Linux_${arch}.tar.gz"
+      echo "$sha  $tmp" | sha256sum -c --quiet -
+      tar -xzf "$tmp" -C "$HOME/.local/bin" arduino-cli
+      rm -f "$tmp"
     fi
     # Serial-port access: PlatformIO/esptool need the dialout group.
     if id -nG "$USER" | tr ' ' '\n' | grep -qx dialout; then

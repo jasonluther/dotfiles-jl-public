@@ -240,9 +240,40 @@ if command -v batcat >/dev/null 2>&1 && ! command -v bat >/dev/null 2>&1; then
   ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
 fi
 
+# fetch_checked <url> <sha256> <file>: download to <file> and refuse it unless its checksum matches.
+fetch_checked() {
+  if ! curl -fsSL -o "$3" "$1"; then
+    echo "$1: download failed, not installed" >&2
+    rm -f "$3"
+    return 1
+  fi
+  if ! echo "$2  $3" | sha256sum -c --quiet -; then
+    echo "$1: checksum mismatch, not installed" >&2
+    rm -f "$3"
+    return 1
+  fi
+}
+
+# ruff and uv: a pinned release, checksum checked (their install.sh piped into sh would run whatever the
+# server sent that day). Checksums from each release's .sha256 files.
 fallback_ruff() {
   command -v ruff >/dev/null 2>&1 && return 0
-  curl -LsSf https://astral.sh/ruff/install.sh | env UV_INSTALL_DIR="$HOME/.local/bin" sh
+  local ver=0.17.4 arch sha tmp
+  case "$(uname -m)" in
+    x86_64) arch=x86_64 sha=3ab2b34aeacdbc1ea5c529cdbda3e05792633d587228123fd09f3b5a0facb27a ;;
+    aarch64 | arm64) arch=aarch64 sha=b939676db4532f748dc38c41361a29260f18b3e24a787d46d9278e449c25c2cf ;;
+    *)
+      echo "ruff: unsupported arch $(uname -m)" >&2
+      return 0
+      ;;
+  esac
+  local rc=0
+  tmp=$(mktemp)
+  fetch_checked "https://github.com/astral-sh/ruff/releases/download/${ver}/ruff-${arch}-unknown-linux-gnu.tar.gz" "$sha" "$tmp" \
+    && tar -xzf "$tmp" -C "$HOME/.local/bin" --strip-components=1 "ruff-${arch}-unknown-linux-gnu/ruff" \
+    || rc=$?
+  rm -f "$tmp"
+  return "$rc"
 }
 
 fallback_watchexec() {
@@ -280,7 +311,22 @@ fallback_tldr() {
 
 fallback_uv() {
   command -v uv >/dev/null 2>&1 && return 0
-  curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$HOME/.local/bin" sh
+  local ver=0.13.9 arch sha tmp
+  case "$(uname -m)" in
+    x86_64) arch=x86_64 sha=a7fbaff2b9a271d85c1bdb540941090fd1ce011797b4abeb48e4dcd39c2471d5 ;;
+    aarch64 | arm64) arch=aarch64 sha=0797542018e541a9288855df555c8077eed06f7a47d206362030480e8ecc9f3d ;;
+    *)
+      echo "uv: unsupported arch $(uname -m)" >&2
+      return 0
+      ;;
+  esac
+  local rc=0
+  tmp=$(mktemp)
+  fetch_checked "https://github.com/astral-sh/uv/releases/download/${ver}/uv-${arch}-unknown-linux-gnu.tar.gz" "$sha" "$tmp" \
+    && tar -xzf "$tmp" -C "$HOME/.local/bin" --strip-components=1 "uv-${arch}-unknown-linux-gnu/uv" "uv-${arch}-unknown-linux-gnu/uvx" \
+    || rc=$?
+  rm -f "$tmp"
+  return "$rc"
 }
 
 fallback_yq() {
