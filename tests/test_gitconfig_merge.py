@@ -30,7 +30,9 @@ def _render(tmp_path: Path) -> Path:
     text = TEMPLATE.read_text()
     text = text.replace("{{ .name | quote }}", '"Test Name"')
     text = text.replace("{{ .email | quote }}", '"test@example.com"')
-    text = re.sub(r'\{\{ lookPath "gh" \}\}', "/usr/bin/gh", text)
+    # Template-only lines (the comment and the `$gh :=` lookup) render to nothing.
+    text = re.sub(r"^\{\{-.*?\}\}\n", "", text, flags=re.MULTILINE | re.DOTALL)
+    text = text.replace("{{ $gh }}", "/usr/bin/gh")
     assert "{{" not in text, "an unhandled template expression is left"
     script = tmp_path / "modify_gitconfig.sh"
     script.write_text(text)
