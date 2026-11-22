@@ -5,7 +5,7 @@ By default, also pushes a per-host snapshot of each PRIVATE repo's working
 state to a `wip/<hostname>` branch on origin (`wip/<hostname>@<dirname>` from
 a linked worktree), so work-in-progress flows between machines without
 relying on Syncthing replicating .git/. Pass --no-push-wip to disable. Public
-repos are never auto-pushed; archived, detached-HEAD, and
+repos are never auto-pushed (GitHub is asked, not the folder trusted); archived, detached-HEAD, and
 mid-rebase/merge/cherry-pick repos are skipped.
 """
 
@@ -20,6 +20,8 @@ import socket
 import subprocess
 import tempfile
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 # Bounds on every subprocess that can touch the network. A connection reset
@@ -252,6 +254,47 @@ def origin_owner(dest):
     """Lowercased GitHub owner from origin's URL (https or ssh), else None."""
     slug = origin_slug(dest)
     return slug.split("/")[0] if slug else None
+
+
+# How long a repo's GitHub visibility answer is reused. A repo made public is
+# caught within this window; until then its snapshot is still pushed.
+VISIBILITY_TTL = 3600
+PROBE_TIMEOUT = 15
+
+
+def _probe_visibility(slug):
+    """'public' if github.com/<slug> loads without signing in, 'private' on 404,
+    None when GitHub can't be asked (offline, rate-limited)."""
+    req = urllib.request.Request(f"https://github.com/{slug}", method="HEAD")
+    try:
+        urllib.request.urlopen(req, timeout=PROBE_TIMEOUT).close()
+        return "public"
+    except urllib.error.HTTPError as exc:
+        return "private" if exc.code == 404 else None
+    except (urllib.error.URLError, OSError):
+        return None
+
+
+def github_visibility(dest):
+    """'public', 'private' or None for origin's GitHub repo, cached per repo.
+
+    Asks anonymously (no GitHub API, no token), so --wip-only stays cheap.
+    An unknown answer is never cached.
+    """
+    slug = origin_slug(dest)
+    if not slug:
+        return None
+    common = _git(dest, ["rev-parse", "--path-format=absolute", "--git-common-dir"])
+    cache = Path(common.stdout.strip()) / "wip-visibility"
+    try:
+        if time.time() - cache.stat().st_mtime < VISIBILITY_TTL:
+            return cache.read_text().strip()
+    except OSError:
+        pass
+    vis = _probe_visibility(slug)
+    if vis:
+        cache.write_text(vis + "\n")
+    return vis
 
 
 def has_origin(dest):
@@ -538,9 +581,10 @@ def bundle_wip(name, dest, hostname, bundle_dir):
 def classify_repo(dest):
     """Route a local repo: 'push' (private GitHub), 'bundle', or 'skip'.
 
-    Only repos directly under ~/Code/gh (private-by-convention) with an origin
-    are pushed to a wip branch — we never push WIP to a public remote. Public
-    repos, ~/Projects repos, and remoteless/local-only repos are bundled.
+    Only repos directly under ~/Code/gh with an origin are pushed to a wip
+    branch, and a GitHub origin must answer private: a public repo cloned into
+    ~/Code/gh (or one whose visibility can't be checked) is bundled instead.
+    Public-dir repos, ~/Projects repos, and remoteless repos are bundled.
     Archived repos and repos whose owner is in the wip-exclude file are skipped.
     """
     dest = Path(dest)
@@ -552,6 +596,8 @@ def classify_repo(dest):
     if origin_owner(dest) in wip_exclude_owners():
         return "skip"
     if parent == GH_DIR and has_origin(dest):
+        if origin_slug(dest) and github_visibility(dest) != "private":
+            return "bundle"
         return "push"
     return "bundle"
 

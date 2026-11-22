@@ -304,6 +304,7 @@ def test_classify(tmp_path, monkeypatch):
     excluded = init_repo(gh / "excl")
     sg._git(excluded, ["remote", "add", "origin", "https://github.com/acme-corp/x.git"])
     assert sg.classify_repo(excluded) == "skip"
+    monkeypatch.setattr(sg, "_probe_visibility", lambda slug: "private")
     ssh = init_repo(gh / "ssh")
     sg._git(ssh, ["remote", "add", "origin", "git@github.com:kilotronic/x.git"])
     assert sg.classify_repo(ssh) == "push"
@@ -634,3 +635,54 @@ def test_push_wip_dirty_unchanged_does_not_repush(tmp_path):
     (r / "wip_new.txt").write_text("more progress")
     sg.push_wip("r", r, "hostx")
     assert git(bare, "rev-parse", "refs/heads/wip/hostx").stdout.strip() != first
+
+
+# ---------- never push WIP to a public GitHub repo ----------
+
+
+def _gh_repo(path, slug):
+    r = init_repo(path)
+    sg._git(r, ["remote", "add", "origin", f"https://github.com/{slug}.git"])
+    return r
+
+
+def test_classify_bundles_a_public_github_repo_under_gh_dir(tmp_path, monkeypatch):
+    # A public repo cloned straight into ~/Code/gh was treated as private by
+    # its folder alone, so its uncommitted work was pushed where anyone can read it.
+    gh = tmp_path / "gh"
+    monkeypatch.setattr(sg, "GH_DIR", gh)
+    vis = {"me/pub": "public", "me/priv": "private", "me/unknown": None}
+    monkeypatch.setattr(sg, "_probe_visibility", lambda slug: vis[slug])
+    assert sg.classify_repo(_gh_repo(gh / "pub", "me/pub")) == "bundle"
+    assert sg.classify_repo(_gh_repo(gh / "priv", "me/priv")) == "push"
+    # Offline or rate-limited: don't push on a guess.
+    assert sg.classify_repo(_gh_repo(gh / "unknown", "me/unknown")) == "bundle"
+
+
+def test_visibility_is_cached_and_rechecked_after_ttl(tmp_path, monkeypatch):
+    calls = []
+
+    def probe(slug):
+        calls.append(slug)
+        return "private"
+
+    monkeypatch.setattr(sg, "_probe_visibility", probe)
+    r = _gh_repo(tmp_path / "r", "me/r")
+    assert sg.github_visibility(r) == "private"
+    assert sg.github_visibility(r) == "private"
+    assert calls == ["me/r"]
+    cache = Path(git(r, "rev-parse", "--absolute-git-dir").stdout.strip()) / (
+        "wip-visibility"
+    )
+    old = time.time() - sg.VISIBILITY_TTL - 1
+    os.utime(cache, (old, old))
+    assert sg.github_visibility(r) == "private"
+    assert calls == ["me/r", "me/r"]
+
+
+def test_unknown_visibility_is_not_cached(tmp_path, monkeypatch):
+    answers = iter([None, "public"])
+    monkeypatch.setattr(sg, "_probe_visibility", lambda slug: next(answers))
+    r = _gh_repo(tmp_path / "r", "me/r")
+    assert sg.github_visibility(r) is None
+    assert sg.github_visibility(r) == "public"
