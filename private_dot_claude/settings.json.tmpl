@@ -105,12 +105,12 @@
   "model": "opus",
   "enableAllProjectMcpServers": true,
   "extraKnownMarketplaces": {
-    "jasonluther-agents": { "source": { "source": "github", "repo": "jasonluther/agents" } },
+    "jasonluther-auditor": { "source": { "source": "github", "repo": "jasonluther/auditor" } },
     "standup-board": { "source": { "source": "github", "repo": "kilotronic/standup-board" } }{{- range $name, $m := (get $plugins "extraKnownMarketplaces" | default dict) }},
     {{ toJson $name }}: {{ toJson $m }}{{- end }}
   },
   "enabledPlugins": {
-    "jl@jasonluther-agents": true,
+    "jl@jasonluther-auditor": true,
     "standup@standup-board": true,{{- range $name, $on := (get $plugins "enabledPlugins" | default dict) }}
     {{ toJson $name }}: {{ toJson $on }},{{- end }}
     "pyright-lsp@claude-plugins-official": false,

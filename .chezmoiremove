@@ -26,7 +26,7 @@
 .claude/commands/watch-to-merge.md
 .claude/commands/rebase-arm-automerge.md
 
-# Moved to plugins (Nov 2026): personal skills and edit hooks to jasonluther/agents (plugin jl),
+# Moved to plugins (Nov 2026): personal skills and edit hooks to the jl plugin (now in jasonluther/auditor),
 # pr/branch-prune/pr-batch to the work plugin turned on by the private overlay.
 # Leftover user-level copies would shadow or double up the plugin versions.
 .claude/commands/chezmoi.md
