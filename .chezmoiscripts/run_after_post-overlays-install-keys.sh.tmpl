@@ -81,6 +81,11 @@ for app in $apps; do
   keys install-key "$app" --mapping "$mapping" || note "install-key $app failed; run: keys install-key $app --mapping $mapping"
 done
 if [ -n "${missing:-}" ]; then
-  note "no App key here for: $missing. From a Mac, run: keys send-key <app> $(hostname -s 2>/dev/null || hostname) --mapping ~/Code/gh/auditor/keys.toml"
+  host=$(hostname -s 2>/dev/null || hostname)
+  note "no App key here for: $missing. From a Mac, run:"
+  # One bare line per App, with no prefix, so each can be copied and pasted whole.
+  for app in $missing; do
+    echo "keys send-key $app $host --mapping ~/Code/gh/auditor/keys.toml"
+  done
 fi
 exit 0
