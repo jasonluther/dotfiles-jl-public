@@ -57,7 +57,8 @@ case "$(uname -s)" in
     if ! command -v arduino-cli >/dev/null 2>&1; then
       echo "==> install arduino-cli to ~/.local/bin"
       install -d "$HOME/.local/bin"
-      # A pinned release, checksum checked (from the release's checksums.txt), not install.sh piped into sh.
+      # A pinned release, checksum checked (from the release's 1.6.0-checksums.txt), not install.sh piped
+      # into sh.
       ver=1.6.0
       case "$(uname -m)" in
         x86_64) arch=64bit sha=321ee249f44c78053234fec0f36101092bc6021bf24939e15e0cc2449c5ed250 ;;
@@ -68,6 +69,7 @@ case "$(uname -s)" in
           ;;
       esac
       tmp=$(mktemp)
+      trap 'rm -f "$tmp"' EXIT
       curl -fsSL -o "$tmp" "https://github.com/arduino/arduino-cli/releases/download/v${ver}/arduino-cli_${ver}_Linux_${arch}.tar.gz"
       echo "$sha  $tmp" | sha256sum -c --quiet -
       tar -xzf "$tmp" -C "$HOME/.local/bin" arduino-cli

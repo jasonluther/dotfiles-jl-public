@@ -242,7 +242,11 @@ fi
 
 # fetch_checked <url> <sha256> <file>: download to <file> and refuse it unless its checksum matches.
 fetch_checked() {
-  curl -fsSL -o "$3" "$1"
+  if ! curl -fsSL -o "$3" "$1"; then
+    echo "$1: download failed, not installed" >&2
+    rm -f "$3"
+    return 1
+  fi
   if ! echo "$2  $3" | sha256sum -c --quiet -; then
     echo "$1: checksum mismatch, not installed" >&2
     rm -f "$3"
@@ -263,10 +267,13 @@ fallback_ruff() {
       return 0
       ;;
   esac
+  local rc=0
   tmp=$(mktemp)
   fetch_checked "https://github.com/astral-sh/ruff/releases/download/${ver}/ruff-${arch}-unknown-linux-gnu.tar.gz" "$sha" "$tmp" \
-    && tar -xzf "$tmp" -C "$HOME/.local/bin" --strip-components=1 "ruff-${arch}-unknown-linux-gnu/ruff"
+    && tar -xzf "$tmp" -C "$HOME/.local/bin" --strip-components=1 "ruff-${arch}-unknown-linux-gnu/ruff" \
+    || rc=$?
   rm -f "$tmp"
+  return "$rc"
 }
 
 fallback_watchexec() {
@@ -313,10 +320,13 @@ fallback_uv() {
       return 0
       ;;
   esac
+  local rc=0
   tmp=$(mktemp)
   fetch_checked "https://github.com/astral-sh/uv/releases/download/${ver}/uv-${arch}-unknown-linux-gnu.tar.gz" "$sha" "$tmp" \
-    && tar -xzf "$tmp" -C "$HOME/.local/bin" --strip-components=1 "uv-${arch}-unknown-linux-gnu/uv" "uv-${arch}-unknown-linux-gnu/uvx"
+    && tar -xzf "$tmp" -C "$HOME/.local/bin" --strip-components=1 "uv-${arch}-unknown-linux-gnu/uv" "uv-${arch}-unknown-linux-gnu/uvx" \
+    || rc=$?
   rm -f "$tmp"
+  return "$rc"
 }
 
 fallback_yq() {
