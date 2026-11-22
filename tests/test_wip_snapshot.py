@@ -615,3 +615,22 @@ def test_bundle_prune_keeps_young_orphan(tmp_path):
     (bundles / "root-gone@hostx.bundle").write_bytes(b"stub")  # fresh mtime
     sg.prune_wip_bundles("hostx", [tmp_path / "empty"], bundles)
     assert (bundles / "root-gone@hostx.bundle").is_file()
+
+
+def test_push_wip_dirty_unchanged_does_not_repush(tmp_path):
+    # A snapshot commit gets a fresh timestamp (so a fresh SHA) every run;
+    # re-pushing it every 5 minutes made every dirty repo look updated on GitHub.
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    r = init_repo(tmp_path / "r", origin=bare)
+    commit_file(r, "a.txt", "hello")
+    git(r, "push", "-q", "origin", "main")
+    (r / "wip_new.txt").write_text("in progress")
+    sg.push_wip("r", r, "hostx")
+    first = git(bare, "rev-parse", "refs/heads/wip/hostx").stdout.strip()
+    time.sleep(1.1)  # commit timestamps have 1s resolution
+    sg.push_wip("r", r, "hostx")
+    assert git(bare, "rev-parse", "refs/heads/wip/hostx").stdout.strip() == first
+    (r / "wip_new.txt").write_text("more progress")
+    sg.push_wip("r", r, "hostx")
+    assert git(bare, "rev-parse", "refs/heads/wip/hostx").stdout.strip() != first
