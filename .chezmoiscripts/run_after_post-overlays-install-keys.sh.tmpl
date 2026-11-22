@@ -15,9 +15,10 @@
 #   Mac that is the login keychain (one Touch ID prompt from 1Password); on
 #   Linux, ~/.config/keys/app-keys/<app>.json. The mapping that names the
 #   1Password item is the auditor's keys.toml (~/Code/gh/auditor, cloned by
-#   sync-gh.py). With no mapping or 1Password not signed in, it prints the
-#   command to run and goes on; an App the mapping doesn't name is skipped
-#   quietly (its key comes from another mapping, by hand).
+#   sync-gh.py). With no mapping it prints the command to run and goes on; an
+#   App the mapping doesn't name is skipped quietly. A Linux host with no
+#   1Password signed in gets its keys sent from a Mac (`keys send-key <app>
+#   <host>`), and this prints that command, once per apply, for the Apps it lacks.
 #
 # Fail-safe: nothing here stops a dotfiles apply.
 #
@@ -53,6 +54,7 @@ command -v keys >/dev/null 2>&1 || exit 0
 apps=$(printf '%s\n' ${KEYS_GH_APPS:-} | tr ',' '\n' | sed -n 's/^[^=]*=//p' | sort -u)
 [ -n "$apps" ] || exit 0
 
+missing=""
 for app in $apps; do
   keys has-key "$app" 2>/dev/null
   case $? in
@@ -64,18 +66,21 @@ for app in $apps; do
       break
       ;;
   esac
+  # A Linux host with no 1Password of its own: its keys come from a Mac.
+  if [ "$(uname -s)" != Darwin ] && ! { command -v op >/dev/null 2>&1 && op whoami >/dev/null 2>&1; }; then
+    missing="${missing:+$missing }$app"
+    continue
+  fi
   todo="keys install-key $app --mapping <keys.toml naming it>"
   if [ ! -r "$mapping" ]; then
     note "no key for $app here, and no $mapping; run: $todo"
     continue
   fi
   grep -q "^name *= *\"$app\"" "$mapping" || continue
-  # On Linux, 1Password must already be signed in (op signin); never prompt for a password here.
-  if [ "$(uname -s)" != Darwin ] && ! op whoami >/dev/null 2>&1; then
-    note "no key for $app here, and 1Password is not signed in; run: op signin && keys install-key $app --mapping $mapping"
-    continue
-  fi
   note "copying $app's key from 1Password (approve the prompt)"
   keys install-key "$app" --mapping "$mapping" || note "install-key $app failed; run: keys install-key $app --mapping $mapping"
 done
+if [ -n "${missing:-}" ]; then
+  note "no App key here for: $missing. From a Mac, run: keys send-key <app> $(hostname -s 2>/dev/null || hostname) --mapping ~/Code/gh/auditor/keys.toml"
+fi
 exit 0
