@@ -38,12 +38,16 @@ cat >"$managed" <<'MANAGED_GITCONFIG_EOF'
 [rebase]
 	autoStash = true
 	updateRefs = true
+{{- /* The real gh, never the agent stand-in in ~/.local/bin: lookPath answered by PATH, which differs
+       between a shell and the daily launchd update, so the rendered file flipped between runs. Agent
+       shells override this helper with `keys git-credential` (dot_config/shell/gh.sh). */ -}}
+{{- $gh := or (findExecutable "gh" (list "/opt/homebrew/bin" "/usr/local/bin" "/usr/bin")) "gh" }}
 [credential "https://github.com"]
 	helper =
-	helper = !{{ lookPath "gh" }} auth git-credential
+	helper = !{{ $gh }} auth git-credential
 [credential "https://gist.github.com"]
 	helper =
-	helper = !{{ lookPath "gh" }} auth git-credential
+	helper = !{{ $gh }} auth git-credential
 [url "https://github.com/"]
 	insteadOf = git@github.com:
 [include]
