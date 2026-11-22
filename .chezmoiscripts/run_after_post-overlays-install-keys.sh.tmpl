@@ -81,6 +81,6 @@ for app in $apps; do
   keys install-key "$app" --mapping "$mapping" || note "install-key $app failed; run: keys install-key $app --mapping $mapping"
 done
 if [ -n "${missing:-}" ]; then
-  note "no App key here for: $missing. From a Mac, run: keys send-key <app> $(hostname -s 2>/dev/null || hostname)"
+  note "no App key here for: $missing. From a Mac, run: keys send-key <app> $(hostname -s 2>/dev/null || hostname) --mapping ~/Code/gh/auditor/keys.toml"
 fi
 exit 0
