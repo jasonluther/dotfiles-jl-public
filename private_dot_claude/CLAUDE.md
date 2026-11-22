@@ -5,9 +5,10 @@ precedence over anything here.
 
 The shared rules (git and branches, working safely, cross-platform) load at every session
 start from a work plugin that the private overlay turns on (`~/.claude/plugins-private.json`);
-change them there. The generic git and GitHub guards come from the public `guards` plugin
-(kilotronic/claude-guards); personal skills and private hooks come from the `jl` plugin
-(`plugins/jl` in jasonluther/auditor), which `settings.json` turns on.
+change them there. The generic git and GitHub guards come from the public `guards` plugin,
+and the `goal` command from its `work` plugin (both kilotronic/claude-guards); personal
+skills and private hooks come from the `jl` plugin (`plugins/jl` in jasonluther/auditor).
+`settings.json` turns all three on.
 
 ## Personal
 

@@ -113,6 +113,7 @@
   "enabledPlugins": {
     "jl@jasonluther-auditor": true,
     "guards@claude-guards": true,
+    "work@claude-guards": true,
     "standup@standup-board": true,{{- range $name, $on := (get $plugins "enabledPlugins" | default dict) }}
     {{ toJson $name }}: {{ toJson $on }},{{- end }}
     "pyright-lsp@claude-plugins-official": false,

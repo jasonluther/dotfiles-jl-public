@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Install keys (kilotronic/keys), which agent sessions' gh and git go through
+# (~/.local/bin/gh and ~/.config/shell/gh.sh), and give each GitHub App in
+# KEYS_GH_APPS its key on this machine, once.
+#
+# run_after_ (not run_onchange_): the key check must run on every apply, so a
+# machine that skipped it (1Password locked, no mapping yet) catches up on the
+# next `chezmoi update`. Once a key is in place this is silent and makes no
+# network call beyond the ls-remote below.
+#
+# - keys itself: `uv tool install` at origin/main's commit, only when that
+#   commit differs from the one installed last (kept in the state file below).
+# - Each App's key: `keys install-key <app>` when this machine has none. On a
+#   Mac that is the login keychain (one Touch ID prompt from 1Password); on
+#   Linux, ~/.config/keys/app-keys/<app>.json. The mapping that names the
+#   1Password item is the auditor's keys.toml (~/Code/gh/auditor, cloned by
+#   sync-gh.py). With no mapping, no entry for the App, or 1Password not signed
+#   in, it prints the command to run and goes on.
+#
+# Fail-safe: nothing here stops a dotfiles apply.
+#
+set -uo pipefail
+
+rev={{ output "sh" "-c" "GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=15 git ls-remote https://github.com/kilotronic/keys.git main 2>/dev/null | cut -f1 || true" | trim | quote }}
+state="${XDG_STATE_HOME:-$HOME/.local/state}/keys/installed-rev"
+mapping="$HOME/Code/gh/auditor/keys.toml"
+export PATH="$HOME/.local/bin:$PATH"
+
+note() { echo "keys: $*"; }
+
+# --- keys itself -------------------------------------------------------------
+if ! command -v uv >/dev/null 2>&1; then
+  note "uv not installed; skipping"
+  exit 0
+fi
+if [ -n "$rev" ] && { ! command -v keys >/dev/null 2>&1 || [ "$(cat "$state" 2>/dev/null)" != "$rev" ]; }; then
+  if GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=15 \
+    uv tool install --quiet --force "git+https://github.com/kilotronic/keys.git@$rev" >/dev/null 2>&1; then
+    mkdir -p "$(dirname "$state")" && echo "$rev" >"$state"
+    note "installed at ${rev:0:7}"
+  else
+    note "could not install from kilotronic/keys (offline?); skipping"
+  fi
+fi
+command -v keys >/dev/null 2>&1 || exit 0
+
+# --- each App's key ----------------------------------------------------------
+# shellcheck source=/dev/null
+[ -r "$HOME/.config/keys/apps.sh" ] && . "$HOME/.config/keys/apps.sh"
+# shellcheck disable=SC2086 # split the owner=app pairs on spaces
+apps=$(printf '%s\n' ${KEYS_GH_APPS:-} | tr ',' '\n' | sed -n 's/^[^=]*=//p' | sort -u)
+[ -n "$apps" ] || exit 0
+
+has_key() {
+  if [ "$(uname -s)" = Darwin ]; then
+    # Attributes only, no -w: the key itself is never read here.
+    security find-generic-password -a keys -s "keys:$1" >/dev/null 2>&1
+  else
+    [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/keys/app-keys/$1.json" ]
+  fi
+}
+
+for app in $apps; do
+  has_key "$app" && continue
+  todo="keys install-key $app --mapping <keys.toml naming it>"
+  if [ ! -r "$mapping" ]; then
+    note "no key for $app here, and no $mapping; run: $todo"
+    continue
+  fi
+  if ! grep -q "^name *= *\"$app\"" "$mapping"; then
+    note "no key for $app here, and $mapping has no entry for it; run: $todo"
+    continue
+  fi
+  # On Linux, 1Password must already be signed in (op signin); never prompt for a password here.
+  if [ "$(uname -s)" != Darwin ] && ! op whoami >/dev/null 2>&1; then
+    note "no key for $app here, and 1Password is not signed in; run: op signin && keys install-key $app --mapping $mapping"
+    continue
+  fi
+  note "copying $app's key from 1Password (approve the prompt)"
+  keys install-key "$app" --mapping "$mapping" || note "install-key $app failed; run: keys install-key $app --mapping $mapping"
+done
+exit 0
