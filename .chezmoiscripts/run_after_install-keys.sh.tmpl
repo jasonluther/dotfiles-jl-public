@@ -51,17 +51,8 @@ command -v keys >/dev/null 2>&1 || exit 0
 apps=$(printf '%s\n' ${KEYS_GH_APPS:-} | tr ',' '\n' | sed -n 's/^[^=]*=//p' | sort -u)
 [ -n "$apps" ] || exit 0
 
-has_key() {
-  if [ "$(uname -s)" = Darwin ]; then
-    # Attributes only, no -w: the key itself is never read here.
-    security find-generic-password -a keys -s "keys:$1" >/dev/null 2>&1
-  else
-    [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/keys/app-keys/$1.json" ]
-  fi
-}
-
 for app in $apps; do
-  has_key "$app" && continue
+  keys has-key "$app" 2>/dev/null && continue
   todo="keys install-key $app --mapping <keys.toml naming it>"
   if [ ! -r "$mapping" ]; then
     note "no key for $app here, and no $mapping; run: $todo"
