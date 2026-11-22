@@ -62,7 +62,15 @@ def full_run(tmp_path, monkeypatch):
 
     def run(repos, *argv, create=True):
         for repo in repos if create else ():
-            sg.repo_dir(repo).joinpath(repo["name"]).mkdir(parents=True, exist_ok=True)
+            dest = sg.repo_dir(repo) / repo["name"]
+            if not dest.exists():
+                _clone_of(dest, *repo["nameWithOwner"].split("/"))
+        private = {r["nameWithOwner"].lower(): r["isPrivate"] for r in repos}
+        monkeypatch.setattr(
+            sg,
+            "_probe_visibility",
+            lambda slug: "private" if private.get(slug, True) else "public",
+        )
         monkeypatch.setattr(sg, "get_repos", lambda: repos)
         monkeypatch.setattr(sys, "argv", ["sync-gh.py", *argv])
         sg.main()
