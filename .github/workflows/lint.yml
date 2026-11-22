@@ -96,10 +96,10 @@ jobs:
       # Shared kilotronic tools. These check the commits this push or pull
       # request brings in, so the matching local hooks are skipped above.
       - name: Secret scan (kilotronic/checks/secret-scan)
-        uses: kilotronic/checks/secret-scan@a6e8917fddb679077a2e8a427598ff1fd7a160ef # v1.0.0
+        uses: kilotronic/checks/secret-scan@1bc3a9cd7c8875e77799faae6774f6f8eec50207 # v1.0.1
 
       - name: Shell, workflow, pin and container lint (kilotronic/checks/lint)
-        uses: kilotronic/checks/lint@a6e8917fddb679077a2e8a427598ff1fd7a160ef # v1.0.0
+        uses: kilotronic/checks/lint@1bc3a9cd7c8875e77799faae6774f6f8eec50207 # v1.0.1
         with:
           # Same shellcheck exclusions as .pre-commit-config.yaml: zsh files,
           # chezmoi templates, and Python hooks deployed under .sh names.
@@ -108,12 +108,12 @@ jobs:
             private_dot_claude/hooks/**
 
       - name: Commit authors and session trailers (kilotronic/checks/git-identity)
-        uses: kilotronic/checks/git-identity@a6e8917fddb679077a2e8a427598ff1fd7a160ef # v1.0.0
+        uses: kilotronic/checks/git-identity@1bc3a9cd7c8875e77799faae6774f6f8eec50207 # v1.0.1
 
       # Refuse private terms (the DATA_LEAK_DENYLIST secret) in this event's commits: added lines,
       # file paths, commit messages and authors.
       - name: Private terms (kilotronic/checks/data-leak-check)
-        uses: kilotronic/checks/data-leak-check@a6e8917fddb679077a2e8a427598ff1fd7a160ef # v1.0.0
+        uses: kilotronic/checks/data-leak-check@1bc3a9cd7c8875e77799faae6774f6f8eec50207 # v1.0.1
         with:
           denylist: ${{ secrets.DATA_LEAK_DENYLIST }}
           # Forks and Dependabot get no Actions secrets: let them through here;
