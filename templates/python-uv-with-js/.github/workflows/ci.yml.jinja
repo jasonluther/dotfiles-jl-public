@@ -56,15 +56,15 @@ jobs:
           uv sync --frozen --group dev
           npm ci
 
-      # Shared kilotronic/lint: shellcheck, actionlint and the pinned-SHA check.
+      # Shared kilotronic/checks/lint: shellcheck, actionlint and the pinned-SHA check.
       - name: Lint shell scripts and workflows
-        uses: kilotronic/lint@50d58c6fc3916432a60d6caf5914d5bb83a60a16 # v1.1.0
+        uses: kilotronic/checks/lint@a6e8917fddb679077a2e8a427598ff1fd7a160ef # v1.0.0
 
       - name: Lint and typecheck
         env:
           # Skip slow hooks (test suite runs as a separate step below for
           # better log readability; vale runs in pre-commit only), the
-          # kilotronic/lint hooks (the step above runs the same checks), and
+          # kilotronic/checks/lint hooks (the step above runs the same checks), and
           # the hooks that check this machine or staged changes (CI checks
           # commits in secrets-scan.yml instead).
           SKIP: pytest,vale-spelling-gate,shellcheck,actionlint,pinned,git-identity,secret-scan
