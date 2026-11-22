@@ -239,13 +239,19 @@ def wip_exclude_owners():
     return {o.lower() for o in _parse_org_list(cfg.read_text())}
 
 
-def origin_owner(dest):
-    """Lowercased GitHub owner from origin's URL (https or ssh), else None."""
+def origin_slug(dest):
+    """Lowercased 'owner/name' from origin's GitHub URL (https or ssh), else None."""
     res = _git(dest, ["remote", "get-url", "origin"])
     if res.returncode != 0:
         return None
-    m = re.search(r"github\.com[:/]([^/]+)/", res.stdout.strip())
-    return m.group(1).lower() if m else None
+    m = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?/?$", res.stdout.strip())
+    return f"{m.group(1)}/{m.group(2)}".lower() if m else None
+
+
+def origin_owner(dest):
+    """Lowercased GitHub owner from origin's URL (https or ssh), else None."""
+    slug = origin_slug(dest)
+    return slug.split("/")[0] if slug else None
 
 
 def has_origin(dest):
@@ -448,20 +454,19 @@ def push_wip(name, dest, hostname):
     branch = f"wip/{hostname}{wip_ref_suffix(dest)}"
     snap = snapshot_commit(dest, f"wip snapshot ({hostname})")
 
-    if snap is None:
-        # Clean tree: capture unpushed commits by pointing wip at HEAD, but
-        # skip if origin/wip/<host> already matches HEAD (redundant push). The
-        # cached remote ref was just refreshed by the prior `git pull`, so a
-        # stale read only risks a harmless extra push.
-        head_sha = _git(dest, ["rev-parse", "HEAD"]).stdout.strip()
-        cached = _git(
-            dest, ["rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}"]
-        )
-        if cached.returncode == 0 and cached.stdout.strip() == head_sha:
-            return  # nothing new
-        ref, suffix = "HEAD", ""
-    else:
-        ref, suffix = snap, " (snapshot of working tree)"
+    # Clean tree: point wip at HEAD so unpushed commits are captured too.
+    ref, suffix = (snap, " (snapshot of working tree)") if snap else ("HEAD", "")
+    # Skip when origin's wip ref already holds these files. Compare trees, not
+    # SHAs: a snapshot commit's SHA changes every run (fresh timestamp), so a
+    # SHA check re-pushed every dirty repo every sweep. The remote-tracking ref
+    # is updated by our own push, so a stale read only costs one extra push.
+    cached = _git(
+        dest,
+        ["rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}^{{tree}}"],
+    )
+    tree = _git(dest, ["rev-parse", f"{ref}^{{tree}}"]).stdout.strip()
+    if cached.returncode == 0 and cached.stdout.strip() == tree:
+        return  # nothing new
 
     push = _git(dest, ["push", "--force", "origin", f"{ref}:refs/heads/{branch}"])
     if push.returncode != 0:
@@ -676,10 +681,21 @@ def main():
         correct_dir = repo_dir(repo)
         correct_path = correct_dir / name
 
-        # Check all other dirs for a misplaced copy
+        # Check all other dirs for a misplaced copy. Only a clone of THIS repo
+        # counts: two owners can share a name (jasonluther/awth, kilotronic/awth),
+        # and moving one into the other's folder nested it deeper every run.
         for d in ALL_REPO_DIRS:
             candidate = d / name
             if candidate.is_dir() and d != correct_dir:
+                if origin_slug(candidate) != repo["nameWithOwner"].lower():
+                    continue
+                if correct_path.exists():
+                    # shutil.move would nest candidate inside it; leave both.
+                    print(
+                        f"  {name}: misplaced copy at {candidate}, but "
+                        f"{correct_path} already exists; resolve by hand"
+                    )
+                    break
                 label_parts = []
                 if repo["isArchived"]:
                     label_parts.append("archived")

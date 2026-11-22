@@ -60,8 +60,8 @@ def full_run(tmp_path, monkeypatch):
         sg, "push_wip", lambda name, dest, host: calls["push_wip"].append(name)
     )
 
-    def run(repos, *argv):
-        for repo in repos:
+    def run(repos, *argv, create=True):
+        for repo in repos if create else ():
             sg.repo_dir(repo).joinpath(repo["name"]).mkdir(parents=True, exist_ok=True)
         monkeypatch.setattr(sg, "get_repos", lambda: repos)
         monkeypatch.setattr(sys, "argv", ["sync-gh.py", *argv])
@@ -139,3 +139,46 @@ def test_the_script_arms_a_whole_run_timeout_before_doing_anything():
     )
     assert done.stdout.strip() == str(sg.RUN_TIMEOUT), done.stderr
     assert 0 < sg.RUN_TIMEOUT <= 3600
+
+
+def _clone_of(path, owner, name):
+    path.mkdir(parents=True)
+    git(path, "init", "-q")
+    git(path, "remote", "add", "origin", f"https://github.com/{owner}/{name}.git")
+
+
+def test_same_name_under_two_owners_does_not_move_either(full_run, tmp_path):
+    # jasonluther/awth (archived) and kilotronic/awth (public) share a name. The
+    # move step used to shove each one into the other's folder, nesting a copy
+    # one level deeper every run until shutil.move hit an existing path.
+    gh = tmp_path / "gh"
+    _clone_of(gh / "archived" / "awth", "jasonluther", "awth")
+    _clone_of(gh / "public" / "awth", "kilotronic", "awth")
+    full_run(
+        [
+            _repo("awth", archived=True),
+            _repo("awth", owner="kilotronic", private=False),
+        ],
+        create=False,
+    )
+    assert sg.origin_owner(gh / "archived" / "awth") == "jasonluther"
+    assert sg.origin_owner(gh / "public" / "awth") == "kilotronic"
+    assert not (gh / "public" / "awth" / "awth").exists()
+    assert not (gh / "archived" / "awth" / "awth").exists()
+
+
+def test_misplaced_repo_is_not_moved_into_an_existing_folder(full_run, tmp_path):
+    gh = tmp_path / "gh"
+    _clone_of(gh / "stale", "jasonluther", "stale")
+    _clone_of(gh / "archived" / "stale", "jasonluther", "stale")
+    full_run([_repo("stale", archived=True)], create=False)
+    assert (gh / "stale").is_dir()
+    assert not (gh / "archived" / "stale" / "stale").exists()
+
+
+def test_misplaced_repo_still_moves(full_run, tmp_path):
+    gh = tmp_path / "gh"
+    _clone_of(gh / "gone", "jasonluther", "gone")
+    full_run([_repo("gone", archived=True)], create=False)
+    assert not (gh / "gone").exists()
+    assert sg.origin_owner(gh / "archived" / "gone") == "jasonluther"
