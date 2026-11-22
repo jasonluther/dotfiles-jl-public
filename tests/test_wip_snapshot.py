@@ -6,6 +6,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import pytest
+
 SRC = (
     Path(__file__).resolve().parents[1] / "dot_local" / "bin" / "executable_sync-gh.py"
 )
@@ -640,6 +642,12 @@ def test_push_wip_dirty_unchanged_does_not_repush(tmp_path):
 # ---------- never push WIP to a public GitHub repo ----------
 
 
+@pytest.fixture(autouse=True)
+def _fresh_probe_state(monkeypatch):
+    # _probe_failed lasts one process (one sweep); each test is a fresh sweep.
+    monkeypatch.setattr(sg, "_probe_failed", False)
+
+
 def _gh_repo(path, slug):
     r = init_repo(path)
     sg._git(r, ["remote", "add", "origin", f"https://github.com/{slug}.git"])
@@ -685,4 +693,22 @@ def test_unknown_visibility_is_not_cached(tmp_path, monkeypatch):
     monkeypatch.setattr(sg, "_probe_visibility", lambda slug: next(answers))
     r = _gh_repo(tmp_path / "r", "me/r")
     assert sg.github_visibility(r) is None
+    monkeypatch.setattr(sg, "_probe_failed", False)  # next sweep
     assert sg.github_visibility(r) == "public"
+
+
+def test_one_unanswered_probe_stops_probing_for_the_run(tmp_path, monkeypatch):
+    # On a network that swallows requests each probe waits PROBE_TIMEOUT; doing
+    # that for every repo would make one sweep outlast the 5-minute interval.
+    calls = []
+
+    def probe(slug):
+        calls.append(slug)
+
+    monkeypatch.setattr(sg, "_probe_visibility", probe)
+    monkeypatch.setattr(sg, "_probe_failed", False)
+    a = _gh_repo(tmp_path / "a", "me/a")
+    b = _gh_repo(tmp_path / "b", "me/b")
+    assert sg.github_visibility(a) is None
+    assert sg.github_visibility(b) is None
+    assert calls == ["me/a"]

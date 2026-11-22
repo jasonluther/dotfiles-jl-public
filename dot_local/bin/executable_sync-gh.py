@@ -5,8 +5,8 @@ By default, also pushes a per-host snapshot of each PRIVATE repo's working
 state to a `wip/<hostname>` branch on origin (`wip/<hostname>@<dirname>` from
 a linked worktree), so work-in-progress flows between machines without
 relying on Syncthing replicating .git/. Pass --no-push-wip to disable. Public
-repos are never auto-pushed (GitHub is asked, not the folder trusted); archived, detached-HEAD, and
-mid-rebase/merge/cherry-pick repos are skipped.
+repos are never auto-pushed (GitHub is asked; the folder isn't trusted);
+archived, detached-HEAD, and mid-rebase/merge/cherry-pick repos are skipped.
 """
 
 import argparse
@@ -77,8 +77,8 @@ ARCHIVED_PUBLIC_DIR = ARCHIVED_DIR / "public"
 # it rides Syncthing without the .git/ conflict storms.
 WIP_BUNDLE_DIR = Path.home() / ".local" / "share" / "wip-bundles"
 
-# Roots scanned by --wip-only for working-tree snapshots (no GitHub API). Repos
-# directly under GH_DIR push to a wip branch; PUBLIC_DIR and ~/Projects bundle.
+# Roots scanned by --wip-only for working-tree snapshots (no GitHub API). Private
+# repos directly under GH_DIR push to a wip branch; everything else bundles.
 WIP_SCAN_ROOTS = [GH_DIR, PUBLIC_DIR, Path.home() / "Projects"]
 
 # Heartbeat touched at the end of every --wip-only run so the backup monitor
@@ -260,6 +260,9 @@ def origin_owner(dest):
 # caught within this window; until then its snapshot is still pushed.
 VISIBILITY_TTL = 3600
 PROBE_TIMEOUT = 15
+# Set once a probe gets no answer: a network that swallows requests would
+# otherwise cost PROBE_TIMEOUT per repo and stretch one sweep past 20 minutes.
+_probe_failed = False
 
 
 def _probe_visibility(slug):
@@ -291,9 +294,14 @@ def github_visibility(dest):
             return cache.read_text().strip()
     except OSError:
         pass
+    global _probe_failed
+    if _probe_failed:
+        return None
     vis = _probe_visibility(slug)
     if vis:
         cache.write_text(vis + "\n")
+    else:
+        _probe_failed = True
     return vis
 
 
