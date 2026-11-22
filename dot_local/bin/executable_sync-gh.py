@@ -459,7 +459,8 @@ def push_wip(name, dest, hostname):
     # Skip when origin's wip ref already holds these files. Compare trees, not
     # SHAs: a snapshot commit's SHA changes every run (fresh timestamp), so a
     # SHA check re-pushed every dirty repo every sweep. The remote-tracking ref
-    # is updated by our own push, so a stale read only costs one extra push.
+    # is updated by our own push. A wip branch deleted on origin stays cached
+    # until a `fetch --prune`; until then an unchanged repo isn't re-pushed.
     cached = _git(
         dest,
         ["rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}^{{tree}}"],
