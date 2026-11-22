@@ -21,6 +21,10 @@ if [[ -n "${CLAUDECODE:-}${AI_AGENT:-}" && -z "${_KEYS_GIT_SET:-}" ]]; then
     "GIT_CONFIG_VALUE_$((_n + 1))=!keys git-credential"
   export "GIT_CONFIG_KEY_$((_n + 2))=credential.https://github.com.useHttpPath" \
     "GIT_CONFIG_VALUE_$((_n + 2))=true"
-  export GIT_CONFIG_COUNT=$((_n + 3))
+  # gist.github.com has no App (App tokens cannot use gists): clear it, so git fails
+  # there rather than reach the owner's login.
+  export "GIT_CONFIG_KEY_$((_n + 3))=credential.https://gist.github.com.helper" \
+    "GIT_CONFIG_VALUE_$((_n + 3))="
+  export GIT_CONFIG_COUNT=$((_n + 4))
   unset _n
 fi
