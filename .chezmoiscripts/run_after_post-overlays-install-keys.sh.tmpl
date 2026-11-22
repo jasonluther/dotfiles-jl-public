@@ -5,7 +5,8 @@
 #
 # run_after_ (not run_onchange_): the key check must run on every apply, so a
 # machine that skipped it (1Password locked, no mapping yet) catches up on the
-# next `chezmoi update`. Once a key is in place this is silent and makes no
+# next `chezmoi update`. Named to sort after run_after_overlays, which writes
+# ~/.config/keys/apps.sh, so a fresh machine gets its key on the first apply. Once a key is in place this is silent and makes no
 # network call beyond the ls-remote below.
 #
 # - keys itself: `uv tool install` at origin/main's commit, only when that
@@ -14,8 +15,9 @@
 #   Mac that is the login keychain (one Touch ID prompt from 1Password); on
 #   Linux, ~/.config/keys/app-keys/<app>.json. The mapping that names the
 #   1Password item is the auditor's keys.toml (~/Code/gh/auditor, cloned by
-#   sync-gh.py). With no mapping, no entry for the App, or 1Password not signed
-#   in, it prints the command to run and goes on.
+#   sync-gh.py). With no mapping or 1Password not signed in, it prints the
+#   command to run and goes on; an App the mapping doesn't name is skipped
+#   quietly (its key comes from another mapping, by hand).
 #
 # Fail-safe: nothing here stops a dotfiles apply.
 #
@@ -52,16 +54,22 @@ apps=$(printf '%s\n' ${KEYS_GH_APPS:-} | tr ',' '\n' | sed -n 's/^[^=]*=//p' | s
 [ -n "$apps" ] || exit 0
 
 for app in $apps; do
-  keys has-key "$app" 2>/dev/null && continue
+  keys has-key "$app" 2>/dev/null
+  case $? in
+    0) continue ;;
+    1) ;;
+    *)
+      # A keys too old to answer: don't treat that as a missing key and prompt every apply.
+      note "this keys has no has-key; skipping the key check"
+      break
+      ;;
+  esac
   todo="keys install-key $app --mapping <keys.toml naming it>"
   if [ ! -r "$mapping" ]; then
     note "no key for $app here, and no $mapping; run: $todo"
     continue
   fi
-  if ! grep -q "^name *= *\"$app\"" "$mapping"; then
-    note "no key for $app here, and $mapping has no entry for it; run: $todo"
-    continue
-  fi
+  grep -q "^name *= *\"$app\"" "$mapping" || continue
   # On Linux, 1Password must already be signed in (op signin); never prompt for a password here.
   if [ "$(uname -s)" != Darwin ] && ! op whoami >/dev/null 2>&1; then
     note "no key for $app here, and 1Password is not signed in; run: op signin && keys install-key $app --mapping $mapping"
