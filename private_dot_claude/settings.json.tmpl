@@ -105,7 +105,7 @@
   "model": "opus",
   "enableAllProjectMcpServers": true,
   "extraKnownMarketplaces": {
-    "jasonluther-auditor": { "source": { "source": "github", "repo": "jasonluther/auditor" } },
+    "jasonluther-auditor": { "source": { "source": "github", "repo": "jasonluther/auditor" }, "autoUpdate": true },
     "standup-board": { "source": { "source": "github", "repo": "kilotronic/standup-board" } }{{- range $name, $m := (get $plugins "extraKnownMarketplaces" | default dict) }},
     {{ toJson $name }}: {{ toJson $m }}{{- end }}
   },
