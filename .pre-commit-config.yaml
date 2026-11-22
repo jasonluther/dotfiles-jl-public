@@ -23,33 +23,21 @@ repos:
 
   # Shared kilotronic tools, pinned to release commits. CI runs the same
   # tools as Actions in .github/workflows/lint.yml.
-  - repo: https://github.com/kilotronic/secret-scan
-    rev: 2665d6f2f0260d3ae0defbedcce27fc63ad6a168 # frozen: v1.2.1
+  - repo: https://github.com/kilotronic/checks
+    rev: 1bc3a9cd7c8875e77799faae6774f6f8eec50207 # frozen: v1.0.1
     hooks:
       - id: secret-scan # pre-commit: the staged changes (gitleaks)
       - id: secret-scan-push # pre-push: the commits being pushed
-
-  - repo: https://github.com/kilotronic/git-identity
-    rev: b0d54e809d81cabf61d357cbe519a9b9263b17cb # frozen: v2.4.0
-    hooks:
       - id: git-identity
         fail_fast: true
       - id: session-trailer # commit-msg: no Claude-Session trailer (public repo)
-
-  # Reads the denylist from ~/.config/data-leak-check/denylist (never in this repo).
-  - repo: https://github.com/kilotronic/data-leak-check
-    rev: f1da8a7ce76bfaabd70ea815d9417fb691e95799 # frozen: v1.1.0
-    hooks:
+      # Reads the denylist from ~/.config/data-leak-check/denylist (never in this repo).
       - id: data-leak-check # pre-commit: staged changes and the commit's identity
       - id: data-leak-check-commit-msg # commit-msg: the message
       - id: data-leak-check-pre-push # pre-push: the commits being pushed
-
-  # The format and lint bundle, with each tool's default configuration unless
-  # the repo has its own (ruff.toml here). markdownlint's bundle defaults match
-  # dot_markdownlintrc, so that file stays the deployed ~/.markdownlintrc only.
-  - repo: https://github.com/kilotronic/lint
-    rev: 56a43d45e7b4479bba97c79404a4dc7671bd9796 # frozen: v1.3.2
-    hooks:
+      # The format and lint bundle, with each tool's default configuration unless
+      # the repo has its own (ruff.toml here). markdownlint's bundle defaults match
+      # dot_markdownlintrc, so that file stays the deployed ~/.markdownlintrc only.
       # format-all: formatters, which rewrite files (first, so the linters see the result)
       - id: ruff-format
       - id: prettier

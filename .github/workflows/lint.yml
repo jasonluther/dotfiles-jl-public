@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 # Runner: GitHub-hosted ubuntu-latest, which is free for public repos and
-# keeps outside pull requests off the owner's machines. (kilotronic/lint's
+# keeps outside pull requests off the owner's machines. (kilotronic/checks/lint's
 # workflow-safety check refuses a self-hosted or vars.* runner for a public
 # repo's pull requests.)
 
@@ -95,11 +95,11 @@ jobs:
 
       # Shared kilotronic tools. These check the commits this push or pull
       # request brings in, so the matching local hooks are skipped above.
-      - name: Secret scan (kilotronic/secret-scan)
-        uses: kilotronic/secret-scan@2665d6f2f0260d3ae0defbedcce27fc63ad6a168 # v1.2.1
+      - name: Secret scan (kilotronic/checks/secret-scan)
+        uses: kilotronic/checks/secret-scan@1bc3a9cd7c8875e77799faae6774f6f8eec50207 # v1.0.1
 
-      - name: Shell, workflow, pin and container lint (kilotronic/lint)
-        uses: kilotronic/lint@56a43d45e7b4479bba97c79404a4dc7671bd9796 # v1.3.2
+      - name: Shell, workflow, pin and container lint (kilotronic/checks/lint)
+        uses: kilotronic/checks/lint@1bc3a9cd7c8875e77799faae6774f6f8eec50207 # v1.0.1
         with:
           # Same shellcheck exclusions as .pre-commit-config.yaml: zsh files,
           # chezmoi templates, and Python hooks deployed under .sh names.
@@ -107,13 +107,13 @@ jobs:
             .chezmoiscripts/** dot_config/shell/** dot_zshrc dot_zprofile
             private_dot_claude/hooks/**
 
-      - name: Commit authors and session trailers (kilotronic/git-identity)
-        uses: kilotronic/git-identity@b0d54e809d81cabf61d357cbe519a9b9263b17cb # v2.4.0
+      - name: Commit authors and session trailers (kilotronic/checks/git-identity)
+        uses: kilotronic/checks/git-identity@1bc3a9cd7c8875e77799faae6774f6f8eec50207 # v1.0.1
 
       # Refuse private terms (the DATA_LEAK_DENYLIST secret) in this event's commits: added lines,
       # file paths, commit messages and authors.
-      - name: Private terms (kilotronic/data-leak-check)
-        uses: kilotronic/data-leak-check@f1da8a7ce76bfaabd70ea815d9417fb691e95799 # v1.1.0
+      - name: Private terms (kilotronic/checks/data-leak-check)
+        uses: kilotronic/checks/data-leak-check@1bc3a9cd7c8875e77799faae6774f6f8eec50207 # v1.0.1
         with:
           denylist: ${{ secrets.DATA_LEAK_DENYLIST }}
           # Forks and Dependabot get no Actions secrets: let them through here;

@@ -9,7 +9,7 @@ default_stages: [pre-commit]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -23,27 +23,19 @@ repos:
       - id: detect-private-key
 
   # Shared kilotronic tools, pinned to release commits.
-  - repo: https://github.com/kilotronic/secret-scan
-    rev: 2665d6f2f0260d3ae0defbedcce27fc63ad6a168 # v1.2.1
+  - repo: https://github.com/kilotronic/checks
+    rev: 1bc3a9cd7c8875e77799faae6774f6f8eec50207 # frozen: v1.0.1
     hooks:
       - id: secret-scan # pre-commit: the staged changes (gitleaks)
       - id: secret-scan-push # pre-push: the commits being pushed
-
-  - repo: https://github.com/kilotronic/git-identity
-    rev: 5a7b91c3194870cf535ba8c37a6c93b19b5a933b # v2.3.1
-    hooks:
       - id: git-identity
         fail_fast: true
-
-  - repo: https://github.com/kilotronic/lint
-    rev: 50d58c6fc3916432a60d6caf5914d5bb83a60a16 # v1.1.0
-    hooks:
       - id: shellcheck
       - id: actionlint
       - id: pinned
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
+    rev: 6fec9b7edb08fd9989088709d864a7826dc74e80 # frozen: v0.15.12
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -60,7 +52,7 @@ repos:
         stages: [pre-commit]
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.48.0
+    rev: e72a3ca1632f0b11a07d171449fe447a7ff6795e # frozen: v0.48.0
     hooks:
       - id: markdownlint
         args: ["--config", ".markdownlint.yaml"]

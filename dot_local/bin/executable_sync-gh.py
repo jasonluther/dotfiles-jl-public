@@ -780,16 +780,14 @@ def main():
     to_clone = []
     to_pull = []
     to_push_wip = []
-    excluded = wip_exclude_owners()
     for repo in repos:
         name = repo["name"]
         dest = repo_dir(repo) / name
         if dest.is_dir():
             if not repo["isArchived"]:
                 to_pull.append((name, dest))
-                # Only auto-push for PRIVATE repos — public stays user-driven.
-                owner = repo["nameWithOwner"].split("/")[0].lower()
-                if args.push_wip and repo["isPrivate"] and owner not in excluded:
+                # Same rule as --wip-only, so the two modes can't disagree.
+                if args.push_wip and classify_repo(dest) == "push":
                     to_push_wip.append((name, dest))
         else:
             to_clone.append((repo, dest))

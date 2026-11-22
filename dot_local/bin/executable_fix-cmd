@@ -3,13 +3,18 @@
 
 Claude Code suggests commands like `! gcloud auth login --no-launch-browser`
 and wraps long ones across lines. Copying that from the terminal leaves a
-leading `!`, indentation, and embedded newlines. fix-cmd joins the lines
-with single spaces (a trailing `\\` continuation is honoured), strips a
-leading `!`, shows the full command, and runs it in $SHELL after you press
-`y` (any other key aborts, no Enter needed).
+leading `!`, indentation, and embedded newlines. fix-cmd rejoins a line onto
+the one before when it is a continuation: the line before ends in `\\`, the
+line is indented deeper than the first, or its first word would not have fit
+in the terminal's width after the line before (where the terminal wrapped;
+a line wider than the terminal was not wrapped there).
+Every other line break is kept, so a multi-line snippet runs as separate
+commands. It strips a leading `!`, shows the command, and runs it in $SHELL
+after you press `y` (any other key aborts, no Enter needed).
 
 A wrap that split a single word (a long URL or path) is rejoined with a
-space, so check the printed command before pressing `y`.
+space, and a terminal resized since the copy can misjudge a wrap, so check
+the printed command before pressing `y`.
 
 Usage:
     fix-cmd             # read clipboard, confirm, run
@@ -26,15 +31,31 @@ import termios
 import tty
 
 
-def clean(text: str) -> str:
-    parts = []
-    for line in text.splitlines():
-        line = line.strip()
-        if line.endswith("\\"):
-            line = line[:-1].rstrip()
-        if line:
-            parts.append(line)
-    cmd = " ".join(parts)
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
+def clean(text: str, width: int | None = None) -> str:
+    width = width or shutil.get_terminal_size().columns
+    raws = [line.rstrip() for line in text.splitlines() if line.strip()]
+    if not raws:
+        return ""
+    base = _indent(raws[0])
+    out: list[str] = []
+    prev = ""
+    for raw in raws:
+        line = raw.strip()
+        if out and (
+            out[-1].endswith("\\")
+            or _indent(raw) > base
+            or len(prev) <= width < len(prev) + 1 + len(line.split()[0])
+        ):
+            out[-1] = out[-1].removesuffix("\\").rstrip() + " " + line
+        else:
+            out.append(line)
+        prev = raw
+    out[-1] = out[-1].removesuffix("\\").rstrip()
+    cmd = "\n".join(out)
     if cmd.startswith("!"):
         cmd = cmd[1:].lstrip()
     return cmd
@@ -70,7 +91,8 @@ def read_key() -> str:
 
 
 def confirm(cmd: str) -> bool:
-    print(f"fix-cmd will run:\n\n  {cmd}\n", file=sys.stderr)
+    shown = cmd.replace("\n", "\n  ")
+    print(f"fix-cmd will run:\n\n  {shown}\n", file=sys.stderr)
     print("Run it? [y/N] ", end="", file=sys.stderr, flush=True)
     key = read_key()
     print(key if key.isprintable() else "", file=sys.stderr)
