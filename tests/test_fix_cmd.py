@@ -126,3 +126,18 @@ def test_clean_keeps_the_line_after_an_unwrapped_long_line():
     assert fix_cmd.clean(f"{long}\ngh repo archive o/r --yes\n", width=80) == (
         f"{long}\ngh repo archive o/r --yes"
     )
+
+
+def test_clean_keeps_lines_when_the_copy_started_inside_the_indent():
+    # The selection began one column into a 2-space block, so only the first
+    # line lost a space; the others are not deeper continuations of it.
+    raw = (
+        " gh secret delete KEY -R o/site\n"
+        "  gh secret list -R o/site\n"
+        "  gh repo deploy-key list -R o/lamp\n"
+    )
+    assert fix_cmd.clean(raw, width=120) == (
+        "gh secret delete KEY -R o/site\n"
+        "gh secret list -R o/site\n"
+        "gh repo deploy-key list -R o/lamp"
+    )
