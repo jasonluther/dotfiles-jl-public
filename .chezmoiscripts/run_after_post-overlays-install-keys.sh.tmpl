@@ -13,12 +13,13 @@
 #   commit differs from the one installed last (kept in the state file below).
 # - Each App's key: `keys install-key <app>` when this machine has none. On a
 #   Mac that is the login keychain (one Touch ID prompt from 1Password); on
-#   Linux, ~/.config/keys/app-keys/<app>.json. The mapping that names the
-#   1Password item is the auditor's keys.toml (~/Code/gh/auditor, cloned by
-#   sync-gh.py). With no mapping it prints the command to run and goes on; an
-#   App the mapping doesn't name is skipped quietly. A Linux host with no
-#   1Password signed in gets its keys sent from a Mac (`keys send-key <app>
-#   <host>`), and this prints that command, once per apply, for the Apps it lacks.
+#   Linux, ~/.config/keys/app-keys/<app>.json. The first key list in
+#   KEYS_MAPPINGS (apps.sh; default the auditor's keys.toml in ~/Code/gh/auditor,
+#   cloned by sync-gh.py) that names the App gives its 1Password item. With no
+#   list readable it prints the command to run and goes on; an App no list names
+#   is skipped quietly. A Linux host with no 1Password signed in gets its keys
+#   sent from a Mac (`fleet-keys <host>`), and this prints that command, once per
+#   apply, for the Apps it lacks.
 #
 # Fail-safe: nothing here stops a dotfiles apply.
 #
@@ -26,7 +27,6 @@ set -uo pipefail
 
 rev={{ output "sh" "-c" "GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=15 git ls-remote https://github.com/kilotronic/keys.git main 2>/dev/null | cut -f1 || true" | trim | quote }}
 state="${XDG_STATE_HOME:-$HOME/.local/state}/keys/installed-rev"
-mapping="$HOME/Code/gh/auditor/keys.toml"
 export PATH="$HOME/.local/bin:$PATH"
 
 note() { echo "keys: $*"; }
@@ -53,6 +53,11 @@ command -v keys >/dev/null 2>&1 || exit 0
 # shellcheck disable=SC2086 # split the owner=app pairs on spaces
 apps=$(printf '%s\n' ${KEYS_GH_APPS:-} | tr ',' '\n' | sed -n 's/^[^=]*=//p' | sort -u)
 [ -n "$apps" ] || exit 0
+mappings=""
+# shellcheck disable=SC2086 # the lists are space-separated
+for m in ${KEYS_MAPPINGS:-$HOME/Code/gh/auditor/keys.toml}; do
+  [ -r "$m" ] && mappings="${mappings:+$mappings }$m"
+done
 
 missing=""
 for app in $apps; do
@@ -71,16 +76,19 @@ for app in $apps; do
     missing="${missing:+$missing }$app"
     continue
   fi
-  todo="keys install-key $app --mapping <keys.toml naming it>"
-  if [ ! -r "$mapping" ]; then
-    note "no key for $app here, and no $mapping; run: $todo"
+  if [ -z "$mappings" ]; then
+    note "no key for $app here, and no key list readable; run: keys install-key $app --mapping <keys.toml naming it>"
     continue
   fi
-  grep -q "^name *= *\"$app\"" "$mapping" || continue
+  mapping=""
+  for m in $mappings; do
+    grep -q "^name *= *\"$app\"" "$m" && mapping=$m && break
+  done
+  [ -n "$mapping" ] || continue
   note "copying $app's key from 1Password (approve the prompt)"
   keys install-key "$app" --mapping "$mapping" || note "install-key $app failed; run: keys install-key $app --mapping $mapping"
 done
 if [ -n "${missing:-}" ]; then
-  note "no App key here for: $missing. From a Mac, run: keys send-key <app> $(hostname -s 2>/dev/null || hostname) --mapping ~/Code/gh/auditor/keys.toml"
+  note "no App key here for: $missing. From a Mac, run: fleet-keys $(hostname -s 2>/dev/null || hostname)"
 fi
 exit 0
