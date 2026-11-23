@@ -42,6 +42,6 @@
 .claude/skills/pr-batch
 .claude/skills/fix-spotlight-reindex-storm
 
-# The standup skill now comes from the standup plugin (kilotronic/standup-board), which
-# settings.json turns on; this copy was written by `standup init --global`.
+# A copy of the standup skill written by `standup init --global`; the standup board is
+# retired and its plugin is off.
 .claude/skills/standup
