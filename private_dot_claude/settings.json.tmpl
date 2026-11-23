@@ -54,12 +54,6 @@
       "Bash(ruff:*)",
       "Bash(sqlite3:*)",
       "Bash(ssh-add:*)",
-      "Bash(standup list:*)",
-      "Bash(standup status:*)",
-      "Bash(standup claim:*)",
-      "Bash(standup done:*)",
-      "Bash(standup park:*)",
-      "Bash(standup resume:*)",
       "Bash(sysctl:*)",
       "Bash(tmutil listlocalsnapshots:*)",
       "Bash(time:*)",
@@ -106,15 +100,14 @@
   "enableAllProjectMcpServers": true,
   "extraKnownMarketplaces": {
     "jasonluther-auditor": { "source": { "source": "github", "repo": "jasonluther/auditor" }, "autoUpdate": true },
-    "claude-guards": { "source": { "source": "github", "repo": "kilotronic/claude-guards" }, "autoUpdate": true },
-    "standup-board": { "source": { "source": "github", "repo": "kilotronic/standup-board" } }{{- range $name, $m := (get $plugins "extraKnownMarketplaces" | default dict) }},
+    "claude-guards": { "source": { "source": "github", "repo": "kilotronic/claude-guards" }, "autoUpdate": true }{{- range $name, $m := (get $plugins "extraKnownMarketplaces" | default dict) }},
     {{ toJson $name }}: {{ toJson $m }}{{- end }}
   },
   "enabledPlugins": {
     "jl@jasonluther-auditor": true,
     "guards@claude-guards": true,
     "work@claude-guards": true,
-    "standup@standup-board": true,{{- range $name, $on := (get $plugins "enabledPlugins" | default dict) }}
+    "standup@standup-board": false,{{- range $name, $on := (get $plugins "enabledPlugins" | default dict) }}
     {{ toJson $name }}: {{ toJson $on }},{{- end }}
     "pyright-lsp@claude-plugins-official": false,
     "code-review@claude-plugins-official": false,
