@@ -12,8 +12,11 @@ skills and private hooks come from the `jl` plugin (`plugins/jl` in jasonluther/
 
 ## Personal
 
-- **Once Jason approves an action, run it yourself** (scripts, tofu, `op` with his Touch ID
-  prompt) instead of handing him commands to type. infra/bootstrap stays his to apply by hand.
+- **Once Jason approves an action, run it yourself** (scripts, `op` with his Touch ID prompt; never a tofu apply)
+  instead of handing him commands to type.
+- **Tofu: plan freely, never apply, even after an approval.** `tofu plan` (and `fmt`, `validate`)
+  is fine to run. Applying happens only from merged configurations, by CI on merge or by Jason by
+  hand (infra/bootstrap, access): open the pull request and say in it whether CI or Jason applies it.
 
 <!-- Machine-local memory overlay: created empty by default; private overlays may
      fill it with host- or tool-specific guidance. Safe to leave empty. -->
