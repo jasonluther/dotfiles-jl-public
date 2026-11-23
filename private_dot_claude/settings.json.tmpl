@@ -4,6 +4,9 @@
 {{- $pluginsPath := joinPath .chezmoi.homeDir ".claude/plugins-private.json" -}}
 {{- if stat $pluginsPath }}{{ $plugins = include $pluginsPath | fromJson }}{{ end -}}
 {
+  "env": {
+    "WORK_MEMORY_MATCH": "."
+  },
   "permissions": {
     "allow": [
       "Bash(\"/Applications/Carbon Copy Cloner.app/Contents/MacOS/ccc\":*)",
