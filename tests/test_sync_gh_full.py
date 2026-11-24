@@ -190,3 +190,54 @@ def test_misplaced_repo_still_moves(full_run, tmp_path):
     full_run([_repo("gone", archived=True)], create=False)
     assert not (gh / "gone").exists()
     assert sg.origin_owner(gh / "archived" / "gone") == "jasonluther"
+
+
+def _clone_with_worktree(path, owner, name, worktree):
+    _clone_of(path, owner, name)
+    git(path, "config", "user.name", "t")
+    git(path, "config", "user.email", "t@t.test")
+    git(path, "commit", "-q", "--allow-empty", "-m", "c")
+    git(path, "worktree", "add", "-q", "-b", "side", str(worktree))
+
+
+def test_moved_repo_keeps_its_linked_worktree_working(full_run, tmp_path, capsys):
+    # A linked worktree's .git file names <old path>/.git/worktrees/<name>, so
+    # after the move every git command in it failed until `worktree repair`.
+    gh = tmp_path / "gh"
+    wt = tmp_path / "pub-wt-feature"
+    _clone_with_worktree(gh / "pub", "jasonluther", "pub", wt)
+    full_run([_repo("pub", private=False)], create=False)
+    assert (gh / "public" / "pub").is_dir()
+    assert git(wt, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() == "side"
+    out = capsys.readouterr().out
+    assert f"pub: repaired worktree {wt}" in out
+
+
+def test_moved_repo_without_worktrees_prints_no_repair_line(full_run, tmp_path, capsys):
+    gh = tmp_path / "gh"
+    _clone_of(gh / "gone", "jasonluther", "gone")
+    full_run([_repo("gone", archived=True)], create=False)
+    out = capsys.readouterr().out
+    assert "worktree" not in out
+    assert "warning" not in out.lower()
+
+
+def test_failed_worktree_repair_warns_and_the_run_goes_on(
+    full_run, tmp_path, capsys, monkeypatch
+):
+    gh = tmp_path / "gh"
+    _clone_of(gh / "gone", "jasonluther", "gone")
+    real_git = sg._git
+
+    def failing_repair(dest, args, **kw):
+        if args[:2] == ["worktree", "repair"]:
+            return subprocess.CompletedProcess(args, 128, "", "fatal: boom\n")
+        return real_git(dest, args, **kw)
+
+    monkeypatch.setattr(sg, "_git", failing_repair)
+    calls = full_run([_repo("gone", archived=True), _repo("priv")], create=False)
+    out = capsys.readouterr().out
+    assert "gone: warning: git worktree repair failed (fatal: boom)" in out
+    assert "Done." in out
+    assert (gh / "archived" / "gone").is_dir()
+    assert calls["clone"] == ["priv"]
