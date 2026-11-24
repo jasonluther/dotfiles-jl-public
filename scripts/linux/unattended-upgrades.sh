@@ -4,8 +4,9 @@
 # Upgrades from *every* configured apt origin (origin=*), not just the
 # security pockets the packaged default allows — so distro -updates and
 # third-party repos (NodeSource, 1Password, Tailscale, ...) are all covered
-# without maintaining an origin list. Hosts reboot automatically at 04:00
-# when an update requires it, even with users logged in.
+# without maintaining an origin list. Hosts never reboot by themselves: an
+# update that needs a reboot waits until you reboot (overnight agent sessions
+# would otherwise be killed at 04:00).
 #
 # Config lives in a 52- drop-in so the packaged 50unattended-upgrades stays
 # pristine and package upgrades never hit a dpkg conffile prompt.
@@ -24,8 +25,7 @@ sudo tee "$conf" >/dev/null <<'EOF'
 Unattended-Upgrade::Origins-Pattern {
     "origin=*";
 };
-Unattended-Upgrade::Automatic-Reboot "true";
-Unattended-Upgrade::Automatic-Reboot-Time "04:00";
+Unattended-Upgrade::Automatic-Reboot "false";
 Unattended-Upgrade::Remove-Unused-Dependencies "true";
 Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
 EOF
