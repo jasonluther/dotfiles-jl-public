@@ -7,6 +7,9 @@ a linked worktree), so work-in-progress flows between machines without
 relying on Syncthing replicating .git/. Pass --no-push-wip to disable. Public
 repos are never auto-pushed (GitHub is asked; the folder isn't trusted);
 archived, detached-HEAD, and mid-rebase/merge/cherry-pick repos are skipped.
+
+A clone in the wrong folder for its status (public, archived) is moved to the
+right one, and its linked worktrees are repaired so they keep working.
 """
 
 import argparse
@@ -710,6 +713,25 @@ def sanitized_hostname():
     return safe or "unknown-host"
 
 
+def repair_worktrees(name, dest):
+    """Point linked worktrees back at a checkout that was just moved to dest.
+
+    Each linked worktree's .git file names <old path>/.git/worktrees/<name>, so
+    after a move every git command in it fails until `git worktree repair` runs
+    from the new path. Run it straight after the move, before anything could
+    prune the worktree records. A failure only warns: the run goes on.
+    """
+    done = _git(dest, ["worktree", "repair"], timeout=60)
+    if done.returncode != 0:
+        detail = (done.stderr or done.stdout).strip().splitlines()
+        reason = detail[-1] if detail else f"exit {done.returncode}"
+        print(f"  {name}: warning: git worktree repair failed ({reason})")
+        return
+    for line in (done.stdout + done.stderr).splitlines():
+        if line.startswith("repair: "):
+            print(f"  {name}: repaired worktree {line.rsplit(': ', 1)[-1]}")
+
+
 def _abort_run(signum, frame):
     """Hard cap on a single run, so the agent can never wedge indefinitely."""
     raise SystemExit(f"sync-gh: aborting run, exceeded {RUN_TIMEOUT}s budget")
@@ -759,6 +781,7 @@ def main():
                 label = ", ".join(label_parts) or "active/private"
                 print(f"  Moving {name} to {label}...")
                 shutil.move(str(candidate), str(correct_path))
+                repair_worktrees(name, correct_path)
                 break
 
     # Build set of all local repo names
