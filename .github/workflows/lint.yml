@@ -55,7 +55,7 @@ jobs:
 
       - name: pre-commit
         env:
-          SKIP: detect-private-key,secret-scan,git-identity,session-trailer,data-leak-check,shellcheck,actionlint,pinned,workflow-safety,non-root
+          SKIP: detect-private-key,secret-scan,git-identity,session-trailer,data-leak-check,shellcheck,actionlint,pinned,workflow-safety
         run: pre-commit run --all-files --show-diff-on-failure --color=always
 
       - name: ruff (shebang Python scripts only)
