@@ -26,7 +26,10 @@ Identity is derived from the source repo. Override with `CHEZMOI_NAME`, `CHEZMOI
 `harden-sshd` disables password authentication. Ensure your key is at
 `https://github.com/<gh-user>.keys` before running.
 
-### ⚠️ Nightly auto-updates and reboots
+### ⚠️ Nightly auto-updates
 
 `unattended-upgrades` installs updates from **all** configured apt origins
-nightly and reboots at 04:00 when required — even with users logged in.
+nightly. It never reboots by itself: when an update needs one,
+`/var/run/reboot-required` appears and the reboot waits for you. Kernel security
+fixes take effect only after that reboot, so check for the file and reboot when
+nothing is running overnight.

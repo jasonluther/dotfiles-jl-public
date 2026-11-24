@@ -5,8 +5,8 @@
 ## Goal
 
 Linux (Debian-family) hosts managed by this repo should install **all** package
-updates nightly via the native package manager, and reboot automatically when
-an update requires it.
+updates nightly via the native package manager. A reboot an update needs waits
+for a person (see Decisions).
 
 ## Decisions
 
@@ -16,10 +16,9 @@ an update requires it.
   additions) are covered with zero list maintenance. The packaged
   `50unattended-upgrades` (security origins) still applies; the pattern is a
   superset.
-- **Auto-reboot: on**, at 04:00 local (`Automatic-Reboot "true"`,
-  `Automatic-Reboot-Time "04:00"`). Known trade-off: a host can reboot
-  overnight with active sessions/tmux (`Automatic-Reboot-WithUsers` defaults
-  true). Accepted.
+- **Auto-reboot: off** (`Automatic-Reboot "false"`; Jason, 2026-11-24). It was
+  on at 04:00, but a reboot kills overnight agent sessions and tmux, which
+  happened on 2026-11-23. An update that needs a reboot waits for a manual one.
 - Also enable `Remove-Unused-Dependencies` and `Remove-Unused-Kernel-Packages`
   so /boot doesn't fill up over time.
 
