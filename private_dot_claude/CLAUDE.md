@@ -17,8 +17,3 @@ skills and private hooks come from the `jl` plugin (`plugins/jl` in jasonluther/
 - **Tofu: plan freely, never apply, even after an approval.** `tofu plan` (and `fmt`, `validate`)
   is fine to run. Applying happens only from merged configurations, by CI on merge or by Jason by
   hand (infra/bootstrap, access): open the pull request and say in it whether CI or Jason applies it.
-
-<!-- Machine-local memory overlay: created empty by default; private overlays may
-     fill it with host- or tool-specific guidance. Safe to leave empty. -->
-
-@~/.claude/CLAUDE.local.md
