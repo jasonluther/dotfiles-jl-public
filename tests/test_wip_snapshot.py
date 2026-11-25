@@ -1124,3 +1124,37 @@ def test_pull_prunes_deleted_remote_branches(tmp_path):
     git(bare, "branch", "-D", "gone")
     sg.pull_repo("r", r)
     assert git(r, "rev-parse", "-q", "--verify", "origin/gone", check=False).returncode
+
+
+def test_push_wip_unpushed_commit_on_a_branch_gone_from_origin_is_pushed(tmp_path):
+    # --wip-only never fetches, so origin/feature can outlive the branch.
+    bare, r = _origin_and_clone(tmp_path)
+    git(r, "checkout", "-q", "-b", "feature")
+    commit_file(r, "b.txt", "two")
+    git(r, "push", "-q", "-u", "origin", "feature")
+    git(bare, "branch", "-D", "feature")
+    sg.push_wip("r", r, "hostx")
+    assert tree_of(bare, "refs/heads/wip/hostx") == tree_of(r, "HEAD")
+
+
+def test_push_wip_asks_origin_once_per_head(tmp_path, monkeypatch):
+    bare, r = _origin_and_clone(tmp_path)
+    git(r, "checkout", "-q", "-b", "feature")
+    commit_file(r, "b.txt", "two")
+    git(r, "push", "-q", "-u", "origin", "feature")
+    calls = []
+    real = sg._git
+
+    def counting(dest, args, **kw):
+        if args[:1] == ["ls-remote"]:
+            calls.append(args)
+        return real(dest, args, **kw)
+
+    monkeypatch.setattr(sg, "_git", counting)
+    sg.push_wip("r", r, "hostx")
+    sg.push_wip("r", r, "hostx")
+    assert len(calls) == 1
+    git(r, "checkout", "-q", "main")  # on origin's default branch: no asking
+    sg.push_wip("r", r, "hostx")
+    assert len(calls) == 1
+    assert "refs/heads/wip/hostx" not in remote_refs(bare)

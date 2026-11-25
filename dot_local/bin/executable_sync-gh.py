@@ -734,6 +734,47 @@ def _confirmed_on_origin(dest):
     return False
 
 
+def origin_default_branch(dest):
+    """origin's default branch as a remote-tracking ref, or None."""
+    for name in ("HEAD", "main", "master"):
+        ref = f"refs/remotes/origin/{name}"
+        if (
+            _git(dest, ["rev-parse", "-q", "--verify", f"{ref}^{{commit}}"]).returncode
+            == 0
+        ):
+            return ref
+    return None
+
+
+def head_on_origin(dest, hostname):
+    """True when origin has HEAD, False when not, None when it can't be asked.
+
+    Tracking refs go stale when a branch is deleted on origin (--wip-only never
+    fetches), so outside origin's default branch origin itself is asked, once
+    per HEAD commit (a stamp in the git dir remembers a yes).
+    """
+    if not on_a_remote_branch(dest):
+        return False
+    default = origin_default_branch(dest)
+    if (
+        default
+        and _git(dest, ["merge-base", "--is-ancestor", "HEAD", default]).returncode == 0
+    ):
+        return True
+    head = _git(dest, ["rev-parse", "HEAD"]).stdout.strip()
+    git_dir = _git(dest, ["rev-parse", "--absolute-git-dir"]).stdout.strip()
+    stamp = Path(git_dir) / f"wip-on-origin-{hostname}"
+    try:
+        if stamp.read_text().strip() == head:
+            return True
+    except OSError:
+        pass
+    confirmed = _confirmed_on_origin(dest)
+    if confirmed:
+        stamp.write_text(head + "\n")
+    return confirmed
+
+
 def push_wip(name, dest, hostname):
     """Push a snapshot of working state to wip/<hostname> on origin.
 
@@ -762,17 +803,13 @@ def push_wip(name, dest, hostname):
     snap = snapshot_commit(dest, snapshot_message(dest, hostname))
     if snap:
         ref, suffix = snap, " (snapshot of working tree)"
-    elif has_head(dest) and not on_a_remote_branch(dest):
-        ref, suffix = "HEAD", ""
-    elif _git(dest, ["rev-parse", "--verify", "-q", cached_ref]).returncode != 0:
-        return  # nothing origin lacks, and no wip ref to delete
     else:
-        # Deleting is the one step that can lose work: check origin itself,
-        # since tracking refs go stale when a branch is deleted there.
-        confirmed = _confirmed_on_origin(dest) if has_head(dest) else True
+        confirmed = head_on_origin(dest, hostname) if has_head(dest) else True
         if confirmed is None:
             return  # origin unreachable: decide next sweep
         if confirmed:
+            if _git(dest, ["rev-parse", "--verify", "-q", cached_ref]).returncode:
+                return  # nothing origin lacks, and no wip ref to delete
             done = _git(dest, ["push", "origin", "--delete", branch])
             if done.returncode == 0:
                 print(f"  {name}: deleted {branch} (nothing origin lacks)")
@@ -783,11 +820,10 @@ def push_wip(name, dest, hostname):
             return
         ref, suffix = "HEAD", ""
 
-    # Skip when origin's wip ref already holds these files. Compare trees, not
-    # SHAs: a snapshot commit's SHA changes every run (fresh timestamp), so a
-    # SHA check re-pushed every dirty repo every sweep. The remote-tracking ref
-    # is updated by our own push. A wip branch deleted on origin stays cached
-    # until a `fetch --prune`; until then an unchanged repo isn't re-pushed.
+    # Skip when origin's wip ref already holds these trees (the snapshot's and
+    # its index parent's). Not SHAs: a snapshot commit's SHA changes every run
+    # (fresh timestamp). The remote-tracking ref is updated by our own push; a
+    # wip branch deleted on origin stays cached until a pruning fetch.
     if _snapshot_trees(dest, cached_ref) == _snapshot_trees(dest, ref):
         return  # nothing new
 
