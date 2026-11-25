@@ -153,10 +153,8 @@ def test_push_wip_clean_synced_is_noop(tmp_path):
     git(r, "push", "-q", "origin", "main")
     git(r, "push", "-q", "--force", "origin", "HEAD:refs/heads/wip/hostx")
     git(r, "fetch", "-q", "origin")
-    before = git(bare, "rev-parse", "refs/heads/wip/hostx").stdout.strip()
-    sg.push_wip("r", r, "hostx")  # nothing changed
-    after = git(bare, "rev-parse", "refs/heads/wip/hostx").stdout.strip()
-    assert before == after
+    sg.push_wip("r", r, "hostx")  # nothing origin lacks: the old ref goes
+    assert git(bare, "rev-parse", "refs/heads/wip/hostx", check=False).returncode
 
 
 def test_push_wip_skips_empty_origin(tmp_path):
@@ -712,3 +710,451 @@ def test_one_unanswered_probe_stops_probing_for_the_run(tmp_path, monkeypatch):
     assert sg.github_visibility(a) is None
     assert sg.github_visibility(b) is None
     assert calls == ["me/a"]
+
+
+# ---------- what a snapshot leaves out ----------
+
+
+def test_snapshot_leaves_out_secrets_whatever_gitignore_says(tmp_path):
+    # A .env the repo's .gitignore missed went into a Syncthing-shared bundle.
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    (r / "sub").mkdir()
+    for name in (".env", ".env.local", ".envrc", "server.pem", "id.key", "sub/.env"):
+        (r / name).write_text("SECRET")
+    for name in (".env.example", ".env.sample", "keep.py"):
+        (r / name).write_text("fine")
+    files = ls_tree_files(r, sg.snapshot_commit(r, "m"))
+    assert {".env.example", ".env.sample", "keep.py"} <= files
+    assert not files & {".env", ".env.local", ".envrc", "server.pem", "id.key"}
+    assert "sub/.env" not in files
+
+
+def test_snapshot_keeps_a_committed_secret_file_at_its_committed_version(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, ".env", "OLD")
+    (r / ".env").write_text("NEW_SECRET")
+    git(r, "add", ".env")
+    (r / "work.txt").write_text("w")
+    sha = sg.snapshot_commit(r, "m")
+    for rev in git(r, "rev-list", sha, "--not", "HEAD").stdout.split():
+        assert git(r, "show", f"{rev}:.env").stdout == "OLD"
+
+
+def test_snapshot_secret_alone_is_nothing_to_snapshot(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    (r / ".env").write_text("SECRET")
+    git(r, "add", ".env")
+    assert sg.snapshot_commit(r, "m") is None
+
+
+def test_snapshot_ignores_mode_only_changes(tmp_path):
+    # One checkout had 3,400 files whose only change was the executable bit.
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.sh", "echo hi")
+    (r / "a.sh").chmod(0o755)
+    assert git(r, "status", "--porcelain").stdout.strip() == "M a.sh"
+    assert sg.snapshot_commit(r, "m") is None
+    git(r, "add", "a.sh")  # staged mode change too
+    assert sg.snapshot_commit(r, "m") is None
+
+
+def test_snapshot_keeps_a_content_change_with_a_mode_change(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.sh", "echo hi")
+    (r / "a.sh").write_text("echo bye")
+    (r / "a.sh").chmod(0o755)
+    sha = sg.snapshot_commit(r, "m")
+    assert git(r, "show", f"{sha}:a.sh").stdout == "echo bye"
+
+
+def test_snapshot_leaves_out_a_nested_clone(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    inner = init_repo(r / "vendor" / "inner")
+    commit_file(inner, "x.txt", "x")
+    (r / "real.txt").write_text("work")
+    files = ls_tree_files(r, sg.snapshot_commit(r, "m"))
+    assert "real.txt" in files
+    assert not any(f.startswith("vendor") for f in files)
+
+
+def test_snapshot_leaves_out_agent_tool_installs(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    (r / ".claude" / "skills" / "mine").mkdir(parents=True)
+    commit_file(r, ".claude/skills/mine/SKILL.md", "v1")
+    noise = (
+        ".agents/tool/x.md",
+        ".claude/skills/installed/SKILL.md",
+        "skills-lock.json",
+        ".claude/worktrees/wt/f.txt",
+        ".claude/settings.local.json",
+    )
+    for name in noise:
+        (r / name).parent.mkdir(parents=True, exist_ok=True)
+        (r / name).write_text("noise")
+    assert sg.snapshot_commit(r, "m") is None
+    (r / ".claude" / "settings.json").write_text("{}")
+    (r / ".claude/skills/mine/SKILL.md").write_text("v2")  # the repo's own skill
+    sha = sg.snapshot_commit(r, "m")
+    files = ls_tree_files(r, sha)
+    assert not files & set(noise)
+    assert ".claude/settings.json" in files
+    assert git(r, "show", f"{sha}:.claude/skills/mine/SKILL.md").stdout == "v2"
+
+
+# ---------- the real index (staged changes) ----------
+
+
+def test_snapshot_keeps_a_staged_version_that_differs_from_the_working_copy(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "v0")
+    (r / "a.txt").write_text("v1")
+    git(r, "add", "a.txt")
+    (r / "a.txt").write_text("v2")
+    sha = sg.snapshot_commit(r, "m")
+    head = git(r, "rev-parse", "HEAD").stdout.strip()
+    assert git(r, "show", f"{sha}:a.txt").stdout == "v2"
+    assert git(r, "rev-parse", f"{sha}^1").stdout.strip() == head
+    assert git(r, "show", f"{sha}^2:a.txt").stdout == "v1"
+    assert git(r, "rev-parse", f"{sha}^2^").stdout.strip() == head
+
+
+def test_snapshot_keeps_a_staged_file_gone_from_disk(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "v0")
+    (r / "new.txt").write_text("staged only")
+    git(r, "add", "new.txt")
+    (r / "new.txt").unlink()
+    sha = sg.snapshot_commit(r, "m")
+    assert sha
+    assert git(r, "show", f"{sha}^2:new.txt").stdout == "staged only"
+
+
+def test_snapshot_has_no_index_parent_when_the_index_adds_nothing(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "v0")
+    (r / "a.txt").write_text("unstaged")
+    sha = sg.snapshot_commit(r, "m")
+    assert git(r, "rev-parse", "--verify", "-q", f"{sha}^2", check=False).returncode
+    git(r, "add", "a.txt")  # index == working tree
+    sha = sg.snapshot_commit(r, "m")
+    assert git(r, "rev-parse", "--verify", "-q", f"{sha}^2", check=False).returncode
+
+
+def test_snapshot_in_an_unborn_repo_keeps_the_index(tmp_path):
+    r = init_repo(tmp_path / "r")
+    (r / "a.txt").write_text("v1")
+    git(r, "add", "a.txt")
+    (r / "a.txt").write_text("v2")
+    sha = sg.snapshot_commit(r, "m")
+    assert git(r, "show", f"{sha}:a.txt").stdout == "v2"
+    assert git(r, "show", f"{sha}^:a.txt").stdout == "v1"
+
+
+def test_snapshot_of_an_empty_unborn_repo_is_none(tmp_path):
+    r = init_repo(tmp_path / "r")
+    assert sg.snapshot_commit(r, "m") is None
+
+
+def test_snapshot_leaves_out_a_mass_staged_deletion(tmp_path, capsys):
+    # An emptied index (every file staged for deletion, all still on disk)
+    # produced a 113 MB staged diff.
+    r = init_repo(tmp_path / "r")
+    for i in range(60):
+        (r / f"f{i}.txt").write_text(str(i))
+    git(r, "add", ".")
+    git(r, "commit", "-q", "-m", "c")
+    git(r, "rm", "-r", "-q", "--cached", ".")
+    assert sg.snapshot_commit(r, "m") is None
+    assert "stages deletion of 60 of 60 files" in capsys.readouterr().out
+    (r / "f0.txt").write_text("edited")
+    sha = sg.snapshot_commit(r, "m")
+    assert git(r, "show", f"{sha}:f0.txt").stdout == "edited"
+    assert git(r, "rev-parse", "--verify", "-q", f"{sha}^2", check=False).returncode
+
+
+def test_snapshot_keeps_a_small_staged_deletion(tmp_path):
+    r = init_repo(tmp_path / "r")
+    for i in range(60):
+        (r / f"f{i}.txt").write_text(str(i))
+    git(r, "add", ".")
+    git(r, "commit", "-q", "-m", "c")
+    git(r, "rm", "-q", "--cached", "f0.txt")
+    sha = sg.snapshot_commit(r, "m")
+    assert sha
+    assert "f0.txt" not in ls_tree_files(r, f"{sha}^2")
+
+
+def _origin_and_clone(tmp_path):
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    r = init_repo(tmp_path / "r", origin=bare)
+    commit_file(r, "a.txt", "hello")
+    git(r, "push", "-q", "-u", "origin", "main")
+    return bare, r
+
+
+def test_push_wip_repushes_when_only_the_index_changed(tmp_path):
+    bare, r = _origin_and_clone(tmp_path)
+    (r / "a.txt").write_text("v1")
+    git(r, "add", "a.txt")
+    (r / "a.txt").write_text("v2")
+    sg.push_wip("r", r, "hostx")
+    assert git(bare, "show", "refs/heads/wip/hostx^2:a.txt").stdout == "v1"
+    (r / "a.txt").write_text("v1b")
+    git(r, "add", "a.txt")
+    (r / "a.txt").write_text("v2")
+    sg.push_wip("r", r, "hostx")
+    assert git(bare, "show", "refs/heads/wip/hostx^2:a.txt").stdout == "v1b"
+
+
+# ---------- push only what origin lacks ----------
+
+
+def test_push_wip_clean_checkout_on_origin_pushes_nothing(tmp_path):
+    # 368 of 537 wip branches on GitHub pointed at a HEAD origin already had.
+    bare, r = _origin_and_clone(tmp_path)
+    sg.push_wip("r", r, "hostx")
+    assert git(bare, "rev-parse", "refs/heads/wip/hostx", check=False).returncode
+
+
+def test_push_wip_clean_checkout_deletes_its_own_stale_wip_ref(tmp_path):
+    bare, r = _origin_and_clone(tmp_path)
+    wt = tmp_path / "r-wt"
+    git(r, "worktree", "add", "-q", "-b", "side", str(wt))
+    (r / "w.txt").write_text("x")
+    (wt / "w.txt").write_text("x")
+    sg.push_wip("r", r, "hostx")
+    sg.push_wip("r-wt", wt, "hostx")
+    git(r, "push", "-q", "origin", "HEAD:refs/heads/wip/otherhost")
+    (r / "w.txt").unlink()  # main checkout is clean again
+    sg.push_wip("r", r, "hostx")
+    refs = remote_refs(bare)
+    assert "refs/heads/wip/hostx" not in refs
+    assert "refs/heads/wip/hostx@r-wt" in refs  # a sibling's own ref stays
+    assert "refs/heads/wip/otherhost" in refs  # other hosts are never touched
+    sg.push_wip("r", r, "hostx")  # nothing left to delete: no error
+
+
+def test_push_wip_clean_unborn_repo_pushes_nothing(tmp_path, capsys):
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    seed = init_repo(tmp_path / "seed", origin=bare)
+    commit_file(seed, "a.txt", "hello")
+    git(seed, "push", "-q", "origin", "main")
+    r = init_repo(tmp_path / "r", origin=bare)
+    git(r, "fetch", "-q", "origin")
+    sg.push_wip("r", r, "hostx")
+    assert git(bare, "rev-parse", "refs/heads/wip/hostx", check=False).returncode
+    assert "failed" not in capsys.readouterr().out
+
+
+def test_push_wip_skips_in_progress_in_a_worktree(tmp_path):
+    bare, r = _origin_and_clone(tmp_path)
+    wt = tmp_path / "r-wt"
+    git(r, "worktree", "add", "-q", "-b", "side", str(wt))
+    (wt / "w.txt").write_text("x")
+    wt_git = Path(git(wt, "rev-parse", "--absolute-git-dir").stdout.strip())
+    (wt_git / "MERGE_HEAD").write_text("deadbeef\n")
+    sg.push_wip("r-wt", wt, "hostx")
+    assert "refs/heads/wip/hostx@r-wt" not in remote_refs(bare)
+
+
+# ---------- where a snapshot came from ----------
+
+
+def test_push_wip_message_names_branch_checkout_and_upstream(tmp_path, monkeypatch):
+    monkeypatch.setattr(sg, "GH_DIR", tmp_path)
+    bare, r = _origin_and_clone(tmp_path)
+    (r / "w.txt").write_text("x")
+    sg.push_wip("r", r, "hostx")
+    msg = git(bare, "log", "-1", "--format=%B", "refs/heads/wip/hostx").stdout
+    subject, _, body = msg.partition("\n")
+    assert subject == "wip snapshot (hostx)"
+    assert "branch: main" in body
+    assert "checkout: r" in body
+    assert "upstream: origin/main" in body
+
+
+def test_snapshot_message_outside_gh_dir_and_without_upstream(tmp_path, monkeypatch):
+    monkeypatch.setattr(sg, "GH_DIR", tmp_path / "gh")
+    r = init_repo(tmp_path / "Projects" / "p")
+    msg = sg.snapshot_message(r, "hostx")
+    assert msg.startswith("wip snapshot (hostx)\n\n")
+    assert "branch: main" in msg
+    assert f"checkout: {r}" in msg
+    assert "upstream: none" in msg
+
+
+def test_snapshot_survives_a_nested_repo_with_no_commit(tmp_path):
+    # `git add -A` refuses the whole tree when an embedded repo has no commit.
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    init_repo(r / "scratch")
+    (r / "scratch" / "f.txt").write_text("x")
+    (r / "real.txt").write_text("work")
+    files = ls_tree_files(r, sg.snapshot_commit(r, "m"))
+    assert "real.txt" in files
+    assert not any(f.startswith("scratch") for f in files)
+
+
+def test_bundle_wip_detached_head_says_so_in_the_message(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "one")
+    commit_file(r, "a.txt", "two")
+    git(r, "checkout", "-q", "HEAD~1")
+    (r / "w.txt").write_text("x")
+    sg.bundle_wip("r", r, "hostx", tmp_path / "bundles")
+    msg = git(r, "log", "-1", "--format=%B", "refs/wip/hostx").stdout
+    assert "branch: (detached)" in msg
+    assert "w.txt" in ls_tree_files(r, "refs/wip/hostx")
+
+
+def test_in_progress_op_outside_a_repo_is_none(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "MERGE_HEAD").write_text("x")
+    assert sg.in_progress_op(tmp_path / "missing") is None
+
+
+# ---------- review fixes ----------
+
+
+def test_snapshot_fails_loudly_when_a_file_cannot_be_read(tmp_path):
+    # --ignore-errors must only forgive a nested repo, not hide a lost edit.
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    (r / "a.txt").write_text("edited")
+    (r / "a.txt").chmod(0)
+    try:
+        with pytest.raises(subprocess.CalledProcessError):
+            sg.snapshot_commit(r, "m")
+    finally:
+        (r / "a.txt").chmod(0o644)
+
+
+def test_snapshot_keeps_new_files_in_a_repos_own_skill(tmp_path):
+    r = init_repo(tmp_path / "r")
+    (r / ".claude" / "skills" / "mine").mkdir(parents=True)
+    commit_file(r, ".claude/skills/mine/SKILL.md", "v1")
+    (r / ".claude/skills/mine/notes.md").write_text("new file in my skill")
+    (r / ".claude" / "skills" / "new").mkdir()
+    (r / ".claude/skills/new/SKILL.md").write_text("a new skill")
+    files = ls_tree_files(r, sg.snapshot_commit(r, "m"))
+    assert ".claude/skills/mine/notes.md" in files
+    # A new skill folder looks like an install until it is staged.
+    assert ".claude/skills/new/SKILL.md" not in files
+    git(r, "add", ".claude/skills/new/SKILL.md")
+    sha = sg.snapshot_commit(r, "m")
+    assert ".claude/skills/new/SKILL.md" in ls_tree_files(r, sha)
+
+
+def test_snapshot_keeps_a_staged_file_in_an_agent_folder(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    (r / ".agents").mkdir()
+    (r / ".agents" / "AGENTS.md").write_text("mine")
+    git(r, "add", "-f", ".agents/AGENTS.md")
+    sha = sg.snapshot_commit(r, "m")
+    assert ".agents/AGENTS.md" in ls_tree_files(r, sha)
+
+
+def test_snapshot_secret_names_ignore_case_and_keep_templates(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    (r / ".ENV").write_text("SECRET")
+    (r / "Server.PEM").write_text("SECRET")
+    (r / ".env.template").write_text("fine")
+    files = ls_tree_files(r, sg.snapshot_commit(r, "m"))
+    assert ".env.template" in files
+    assert not files & {".ENV", "Server.PEM"}
+
+
+def test_push_wip_commit_only_on_another_remote_is_pushed(tmp_path):
+    bare, r = _origin_and_clone(tmp_path)
+    up = tmp_path / "upstream.git"
+    git(tmp_path, "init", "-q", "--bare", str(up), check=False)
+    git(r, "remote", "add", "upstream", str(up))
+    commit_file(r, "b.txt", "two")
+    git(r, "push", "-q", "upstream", "main")
+    sg.push_wip("r", r, "hostx")
+    assert tree_of(bare, "refs/heads/wip/hostx") == tree_of(r, "HEAD")
+
+
+def test_push_wip_keeps_wip_ref_when_the_branch_is_gone_from_origin(tmp_path):
+    # A stale tracking ref (branch deleted on GitHub) still "contains" HEAD.
+    bare, r = _origin_and_clone(tmp_path)
+    git(r, "checkout", "-q", "-b", "feature")
+    commit_file(r, "b.txt", "two")
+    git(r, "push", "-q", "-u", "origin", "feature")
+    (r / "w.txt").write_text("x")
+    sg.push_wip("r", r, "hostx")
+    (r / "w.txt").unlink()
+    git(bare, "branch", "-D", "feature")  # deleted on origin, still cached here
+    sg.push_wip("r", r, "hostx")
+    assert "refs/heads/wip/hostx" in remote_refs(bare)
+
+
+def test_push_wip_unborn_repo_repushes_when_only_the_index_changed(tmp_path):
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    seed = init_repo(tmp_path / "seed", origin=bare)
+    commit_file(seed, "a.txt", "hello")
+    git(seed, "push", "-q", "origin", "main")
+    r = init_repo(tmp_path / "r", origin=bare)
+    git(r, "fetch", "-q", "origin")
+    (r / "n.txt").write_text("v1")
+    git(r, "add", "n.txt")
+    (r / "n.txt").write_text("v2")
+    sg.push_wip("r", r, "hostx")
+    (r / "n.txt").write_text("v1b")
+    git(r, "add", "n.txt")
+    (r / "n.txt").write_text("v2")
+    sg.push_wip("r", r, "hostx")
+    assert git(bare, "show", "refs/heads/wip/hostx^:n.txt").stdout == "v1b"
+
+
+def test_pull_prunes_deleted_remote_branches(tmp_path):
+    bare, r = _origin_and_clone(tmp_path)
+    git(r, "config", "fetch.prune", "false")  # a user default must not decide it
+    git(r, "push", "-q", "origin", "main:gone")
+    git(r, "fetch", "-q", "origin")
+    git(bare, "branch", "-D", "gone")
+    sg.pull_repo("r", r)
+    assert git(r, "rev-parse", "-q", "--verify", "origin/gone", check=False).returncode
+
+
+def test_push_wip_unpushed_commit_on_a_branch_gone_from_origin_is_pushed(tmp_path):
+    # --wip-only never fetches, so origin/feature can outlive the branch.
+    bare, r = _origin_and_clone(tmp_path)
+    git(r, "checkout", "-q", "-b", "feature")
+    commit_file(r, "b.txt", "two")
+    git(r, "push", "-q", "-u", "origin", "feature")
+    git(bare, "branch", "-D", "feature")
+    sg.push_wip("r", r, "hostx")
+    assert tree_of(bare, "refs/heads/wip/hostx") == tree_of(r, "HEAD")
+
+
+def test_push_wip_asks_origin_once_per_head(tmp_path, monkeypatch):
+    bare, r = _origin_and_clone(tmp_path)
+    git(r, "checkout", "-q", "-b", "feature")
+    commit_file(r, "b.txt", "two")
+    git(r, "push", "-q", "-u", "origin", "feature")
+    calls = []
+    real = sg._git
+
+    def counting(dest, args, **kw):
+        if args[:1] == ["ls-remote"]:
+            calls.append(args)
+        return real(dest, args, **kw)
+
+    monkeypatch.setattr(sg, "_git", counting)
+    sg.push_wip("r", r, "hostx")
+    sg.push_wip("r", r, "hostx")
+    assert len(calls) == 1
+    git(r, "checkout", "-q", "main")  # on origin's default branch: no asking
+    sg.push_wip("r", r, "hostx")
+    assert len(calls) == 1
+    assert "refs/heads/wip/hostx" not in remote_refs(bare)
