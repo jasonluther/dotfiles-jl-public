@@ -57,3 +57,4 @@ __pycache__
 // Atomic bundle writes land as <name>.bundle.tmp before an atomic rename;
 // never sync the half-written temp file.
 *.bundle.tmp
+*.bundle.tmp.lock

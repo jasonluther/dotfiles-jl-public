@@ -1200,7 +1200,8 @@ def test_bundle_holds_only_its_own_snapshot_ref(tmp_path):
     }
 
 
-def test_bundle_is_relative_to_origins_default_branch(tmp_path):
+def test_bundle_is_relative_to_origins_default_branch(tmp_path, monkeypatch):
+    monkeypatch.setattr(sg, "origin_slug", lambda dest: "me/r")
     _, r = _cloned(tmp_path)
     (r / "m.txt").write_text("y")
     bundles = tmp_path / "bundles"
@@ -1315,3 +1316,59 @@ def test_tidy_removes_conflict_copies_and_stale_locks(tmp_path):
 
 def test_tidy_without_a_bundle_dir_is_quiet(tmp_path):
     sg.tidy_bundle_dir(tmp_path / "missing")
+
+
+def test_bundle_with_an_origin_only_this_machine_reaches_is_full(tmp_path):
+    # A local-path (or LAN) origin can't supply the base on another machine.
+    _, r = _cloned(tmp_path)
+    (r / "m.txt").write_text("y")
+    bundles = tmp_path / "bundles"
+    sg.bundle_wip("r", r, "hostx", bundles)
+    bundle = bundles / f"{sg.bundle_key(r)}@hostx.bundle"
+    verify = git(r, "bundle", "verify", str(bundle))
+    assert "complete history" in verify.stdout + verify.stderr
+
+
+def test_bundle_keeps_commits_on_a_branch_gone_from_origin(tmp_path):
+    # --wip-only never fetches, so origin/feature can outlive the branch.
+    bare, r = _cloned(tmp_path)
+    git(r, "checkout", "-q", "-b", "feature")
+    commit_file(r, "b.txt", "two")
+    git(r, "push", "-q", "-u", "origin", "feature")
+    git(bare, "branch", "-D", "feature")
+    bundles = tmp_path / "bundles"
+    sg.bundle_wip("r", r, "hostx", bundles)
+    bundle = bundles / f"{sg.bundle_key(r)}@hostx.bundle"
+    assert bundle.is_file()
+
+
+def test_bundle_kept_when_origin_cannot_be_asked(tmp_path):
+    _, r = _cloned(tmp_path)
+    git(r, "checkout", "-q", "-b", "feature")
+    commit_file(r, "b.txt", "two")
+    bundles = tmp_path / "bundles"
+    sg.bundle_wip("r", r, "hostx", bundles)
+    bundle = bundles / f"{sg.bundle_key(r)}@hostx.bundle"
+    git(r, "push", "-q", "-u", "origin", "feature")
+    git(r, "remote", "set-url", "origin", str(tmp_path / "unreachable.git"))
+    sg.bundle_wip("r", r, "hostx", bundles)
+    assert bundle.is_file()
+
+
+def test_tidy_goes_on_past_a_file_it_cannot_remove(tmp_path, monkeypatch):
+    bundles = tmp_path / "bundles"
+    bundles.mkdir()
+    a = bundles / "a@h.sync-conflict-1-2-X.bundle"
+    b = bundles / "b@h.sync-conflict-1-2-X.bundle"
+    a.write_bytes(b"x")
+    b.write_bytes(b"x")
+    real = Path.unlink
+
+    def unlink(self, *args, **kw):
+        if self.name.startswith("a@"):
+            raise PermissionError("locked")
+        return real(self, *args, **kw)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+    sg.tidy_bundle_dir(bundles)
+    assert not b.exists()

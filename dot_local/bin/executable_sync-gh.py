@@ -422,6 +422,8 @@ def tidy_bundle_dir(bundle_dir):
                 print(f"  removed {f.name} from the bundle folder")
         except FileNotFoundError:
             pass
+        except OSError as exc:
+            print(f"  could not remove {f.name} from the bundle folder ({exc})")
 
 
 def prune_wip_bundles(hostname, roots, bundle_dir):
@@ -887,9 +889,12 @@ def bundle_wip(name, dest, hostname, bundle_dir):
 
     snap = snapshot_commit(dest, snapshot_message(dest, hostname))
     head = has_head(dest)
+    on_origin = head_on_origin(dest, hostname) if head and not snap else None
     if snap:
         target = snap
-    elif head and not on_a_remote_branch(dest):
+    elif head and on_origin is None:
+        return  # origin can't be asked: keep the bundle as it is
+    elif head and not on_origin:
         target = "HEAD"
     else:
         if bundle_path.is_file():
@@ -907,7 +912,8 @@ def bundle_wip(name, dest, hostname, bundle_dir):
         return  # unchanged and bundle already present
 
     _git(dest, ["update-ref", wip_ref, target], check=True)
-    base = origin_default_branch(dest)
+    # Only a GitHub origin can supply the base on every other machine.
+    base = origin_default_branch(dest) if origin_slug(dest) else None
     bundle_dir.mkdir(parents=True, exist_ok=True)
     tmp_path = bundle_path.with_name(bundle_path.name + ".tmp")
     revs = [wip_ref, f"^{base}"] if base else [wip_ref]

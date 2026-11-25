@@ -216,6 +216,7 @@ def test_own_host_bundle_excluded(tmp_path, monkeypatch):
 def test_apply_from_bundle_whose_base_the_receiver_has_not_fetched(
     tmp_path, monkeypatch
 ):
+    monkeypatch.setattr(sg, "origin_slug", lambda dest: "me/myrepo")
     # A bundle is relative to origin's default branch as the sender last saw
     # it; a receiver that hasn't fetched since lacks that prerequisite.
     bare = tmp_path / "o.git"
@@ -240,3 +241,30 @@ def test_apply_from_bundle_whose_base_the_receiver_has_not_fetched(
     git(B, "merge", "-q", "--ff-only", "origin/main")
     assert wip.cmd_apply("hostB", "hostA", force=False) == 0
     assert (B / "wipfile.txt").read_text() == "from A"
+
+
+def test_unreadable_bundle_is_reported(tmp_path, monkeypatch, capsys):
+    home = tmp_path / "B"
+    B = init_repo(home / "proj" / "myrepo")
+    commit_file(B, "a.txt", "hello")
+    bundles = tmp_path / "bundles"
+    bundles.mkdir()
+    other = init_repo(tmp_path / "other")
+    commit_file(other, "x.txt", "x")
+    commit_file(other, "y.txt", "y")
+    git(other, "update-ref", "refs/wip/hostA", "HEAD")
+    monkeypatch.setenv("HOME", str(home))
+    name = f"{wip.bundle_key(B)}@hostA.bundle"
+    git(
+        other,
+        "bundle",
+        "create",
+        "-q",
+        str(bundles / name),
+        "refs/wip/hostA",
+        "^HEAD~1",
+    )
+    monkeypatch.setattr(wip, "WIP_BUNDLE_DIR", bundles)
+    monkeypatch.chdir(B)
+    assert wip.gather_snapshots("hostB") == {}
+    assert name in capsys.readouterr().err
