@@ -57,6 +57,5 @@ VS Code user `settings.json` should include:
 
 - Faster than `mypy`, with stronger inference and better support for modern typing features (PEP 695 generics, `TypeIs`, etc.).
 - `basedpyright` (community fork with stricter defaults) is a strong contender — switch to it if pyright's default permissiveness causes issues. Drop-in compatible: same `[tool.pyright]` config, same CLI surface.
-- Aligns with the `pyright-lsp` Claude plugin already enabled in `private_dot_claude/settings.json.tmpl`.
 
 In `templates/python-uv-with-js/`, pyright is installed via `package.json` (the JS toolchain is already present). In `templates/python-uv/`, pyright is in `[dependency-groups].dev` so `uv run pyright` works without npm.
