@@ -403,6 +403,29 @@ def prune_wip_refs(dest, hostname):
                 print(f"  {dest.name}: pruned orphaned {short}")
 
 
+# A bundle write left behind by a killed run; younger ones may be in progress.
+STALE_TMP_AGE = 86400
+
+
+def tidy_bundle_dir(bundle_dir):
+    """Remove Syncthing conflict copies, and temp and lock files a killed
+    bundle write left behind, from the bundle folder."""
+    if not bundle_dir.is_dir():
+        return
+    cutoff = time.time() - STALE_TMP_AGE
+    for f in bundle_dir.iterdir():
+        if ".sync-conflict-" not in f.name and ".bundle.tmp" not in f.name:
+            continue
+        try:
+            if ".sync-conflict-" in f.name or f.stat().st_mtime < cutoff:
+                f.unlink()
+                print(f"  removed {f.name} from the bundle folder")
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            print(f"  could not remove {f.name} from the bundle folder ({exc})")
+
+
 def prune_wip_bundles(hostname, roots, bundle_dir):
     """Delete this host's bundles for repos that no longer exist locally.
 
@@ -839,9 +862,16 @@ def bundle_wip(name, dest, hostname, bundle_dir):
 
     For repos with no private GitHub origin (local-only, public, or under
     ~/Projects). A bundle is a single file, so it rides Syncthing without the
-    many-small-mutating-files conflicts that syncing .git/ directly causes. The
-    working-tree snapshot (incl. new files) is stored on a local refs/wip/<host>
-    ref and bundled alongside all branches/tags.
+    many-small-mutating-files conflicts that syncing .git/ directly causes.
+
+    The bundle holds only this checkout's snapshot ref (refs/wip/<host>,
+    suffixed in a linked worktree), with origin's default branch as its
+    prerequisite so history origin has isn't repeated; with no origin default
+    branch, or when origin isn't on GitHub (so other machines can't fetch
+    the base), it carries the snapshot's full history. Other local branches
+    and tags are not carried. With a GitHub origin it holds only what origin
+    lacks: local changes, or commits on no remote branch; otherwise this
+    checkout's own bundle is removed.
 
     Per-host filename (`<repo>@<host>.bundle`) so two machines never write the
     same file. Skips re-bundling when nothing changed since the last run.
@@ -851,39 +881,50 @@ def bundle_wip(name, dest, hostname, bundle_dir):
         print(f"  {name}: skipping bundle (in-progress {op})")
         return
 
-    snap = snapshot_commit(dest, snapshot_message(dest, hostname))
-    target = snap or ("HEAD" if has_head(dest) else None)
-    if target is None:
-        return  # empty repo, nothing to bundle
-
+    git_dir = _git(dest, ["rev-parse", "--absolute-git-dir"]).stdout.strip()
+    sig_file = Path(git_dir) / f"wip-bundle-{hostname}.sig"
+    bundle_path = bundle_dir / f"{bundle_key(dest)}@{hostname}.bundle"
     # Suffixed per worktree: refs/wip/* lives in the SHARED repo storage, so
     # a sibling worktree writing the same name between our update-ref and the
     # bundle create below would bundle the wrong tree under this repo's key.
     wip_ref = f"refs/wip/{hostname}{wip_ref_suffix(dest)}"
-    _git(dest, ["update-ref", wip_ref, target], check=True)
 
-    # Change detection: signature over the wip ref + all branch/tag tips. Skip
-    # the (relatively expensive) bundle write when nothing moved since last time.
-    sig = _git(
-        dest,
-        [
-            "for-each-ref",
-            "--format=%(refname) %(objectname)",
-            "refs/heads",
-            "refs/tags",
-            wip_ref,
-        ],
-    ).stdout
-    git_dir = _git(dest, ["rev-parse", "--absolute-git-dir"]).stdout.strip()
-    sig_file = Path(git_dir) / f"wip-bundle-{hostname}.sig"
-    bundle_path = bundle_dir / f"{bundle_key(dest)}@{hostname}.bundle"
+    snap = snapshot_commit(dest, snapshot_message(dest, hostname))
+    head = has_head(dest)
+    # Only a GitHub origin is one every other machine can fetch from.
+    github = bool(origin_slug(dest))
+    on_origin = (
+        head_on_origin(dest, hostname) if head and github and not snap else False
+    )
+    if snap:
+        target = snap
+    elif not head:
+        return  # nothing committed, or HEAD unreadable: leave the bundle alone
+    elif on_origin is None:
+        return  # origin can't be asked: keep the bundle as it is
+    elif not on_origin:
+        target = "HEAD"
+    else:
+        if bundle_path.is_file():
+            bundle_path.unlink()
+            print(f"  {name}: removed {bundle_path.name} (nothing origin lacks)")
+        sig_file.unlink(missing_ok=True)
+        _git(dest, ["update-ref", "-d", wip_ref])
+        return
+
+    # Trees, not the snapshot's SHA, which changes every run (fresh timestamp).
+    head_sha = _git(dest, ["rev-parse", "HEAD"]).stdout.strip() if head else ""
+    sig = " ".join([*_snapshot_trees(dest, target), head_sha]) + "\n"
     prev = sig_file.read_text() if sig_file.is_file() else None
     if prev == sig and bundle_path.is_file():
         return  # unchanged and bundle already present
 
+    _git(dest, ["update-ref", wip_ref, target], check=True)
+    base = origin_default_branch(dest) if github else None
     bundle_dir.mkdir(parents=True, exist_ok=True)
     tmp_path = bundle_path.with_name(bundle_path.name + ".tmp")
-    res = _git(dest, ["bundle", "create", str(tmp_path), "--all", wip_ref])
+    revs = [wip_ref, f"^{base}"] if base else [wip_ref]
+    res = _git(dest, ["bundle", "create", "-q", str(tmp_path), *revs])
     if res.returncode != 0:
         print(f"  {name}: bundle failed ({res.stderr.strip()})")
         tmp_path.unlink(missing_ok=True)
@@ -952,6 +993,10 @@ def wip_only_main(hostname, roots, bundle_dir):
         prune_wip_bundles(hostname, roots, bundle_dir)
     except Exception as exc:  # noqa: BLE001
         print(f"  bundle prune failed ({exc})")
+    try:
+        tidy_bundle_dir(bundle_dir)
+    except OSError as exc:
+        print(f"  bundle folder clean-up failed ({exc})")
     # No summary line: push_wip/bundle_wip already log only when they act, so a
     # quiet machine writes nothing to the launchd log (which appends forever).
     # The heartbeat below is the "it ran" signal the monitor checks.

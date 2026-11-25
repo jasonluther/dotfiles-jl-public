@@ -103,6 +103,7 @@ def gather_snapshots(this_host):
                 snaps[name] = sha
 
     key = bundle_key(repo_root())
+    fetched_origin = False
     if WIP_BUNDLE_DIR.is_dir():
         for bundle in sorted(WIP_BUNDLE_DIR.glob(f"{key}@*.bundle")):
             host = bundle.name[len(key) + 1 : -len(".bundle")]
@@ -119,9 +120,27 @@ def gather_snapshots(this_host):
             ]
             if not wip_refs:
                 continue
-            fetched = git(
-                ["fetch", "-q", str(bundle), f"+{wip_refs[0]}:refs/wip-remote/{host}"]
-            )
+            fetch = [
+                "fetch",
+                "-q",
+                str(bundle),
+                f"+{wip_refs[0]}:refs/wip-remote/{host}",
+            ]
+            fetched = git(fetch)
+            if fetched.returncode != 0 and has_origin() and not fetched_origin:
+                # The bundle's base is origin's default branch as the sender
+                # last saw it; fetch origin for it (once), then try again.
+                fetched_origin = True
+                try:
+                    git(["fetch", "-q", "origin"], timeout=120)
+                except subprocess.TimeoutExpired:
+                    pass
+                fetched = git(fetch)
+            if fetched.returncode != 0:
+                print(
+                    f"wip: can't read {bundle.name}: {fetched.stderr.strip()}",
+                    file=sys.stderr,
+                )
             if fetched.returncode == 0:
                 snaps[host] = f"refs/wip-remote/{host}"
     return snaps

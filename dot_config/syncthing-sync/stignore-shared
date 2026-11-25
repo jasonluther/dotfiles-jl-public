@@ -54,6 +54,7 @@ __pycache__
 // a Syncthing folder.
 .git
 
-// Atomic bundle writes land as <name>.bundle.tmp before an atomic rename;
-// never sync the half-written temp file.
+// Atomic bundle writes land as <name>.bundle.tmp (git holds <name>.bundle.tmp.lock
+// while writing) before an atomic rename; never sync either.
 *.bundle.tmp
+*.bundle.tmp.lock
