@@ -4,7 +4,10 @@
 By default, also pushes a per-host snapshot of each PRIVATE repo's working
 state to a `wip/<hostname>` branch on origin (`wip/<hostname>@<dirname>` from
 a linked worktree), so work-in-progress flows between machines without
-relying on Syncthing replicating .git/. Pass --no-push-wip to disable. Public
+relying on Syncthing replicating .git/. Only what origin lacks is pushed
+(local changes, or commits on no remote branch); a clean checkout deletes its
+own wip ref. Secrets (.env*, .envrc, *.pem, *.key), agent tool installs and
+nested clones are never snapshotted. Pass --no-push-wip to disable. Public
 repos are never auto-pushed (GitHub is asked; the folder isn't trusted);
 archived, detached-HEAD, and mid-rebase/merge/cherry-pick repos are skipped.
 
@@ -198,14 +201,18 @@ def pull_repo(name, dest):
 
 def in_progress_op(dest):
     """Return marker name if a git operation is in-flight, else None."""
-    git_dir = Path(dest) / ".git"
+    # A linked worktree's .git is a file; its markers live in its own git dir.
+    found = _git(dest, ["rev-parse", "--absolute-git-dir"]).stdout.strip()
+    if not found:
+        return None
+    git_dir = Path(found)
     for marker in IN_PROGRESS_MARKERS:
         if (git_dir / marker).exists():
             return marker
     return None
 
 
-def _git(dest, args, env=None, check=False, timeout=NET_TIMEOUT):
+def _git(dest, args, env=None, check=False, timeout=NET_TIMEOUT, input=None):
     """Run `git -C dest ...`, capturing output. Thin wrapper for brevity.
 
     A timed-out call comes back as a normal failed CompletedProcess (rc 124) so
@@ -221,6 +228,7 @@ def _git(dest, args, env=None, check=False, timeout=NET_TIMEOUT):
             env=env,
             check=check,
             timeout=timeout,
+            input=input,
         )
     except subprocess.TimeoutExpired:
         if check:
@@ -417,44 +425,194 @@ def prune_wip_bundles(hostname, roots, bundle_dir):
             print(f"  pruned orphaned bundle {bundle.name}")
 
 
-def snapshot_commit(dest, message):
-    """Commit the full working tree without disturbing the repo.
+# Never snapshotted, whatever the repo's .gitignore says. A tracked one keeps
+# its committed version, so a snapshot never carries a newer secret.
+SECRET_KEEP = (".env.example", ".env.sample")
+# Agent tool installs: left out unless the repo already tracks the path.
+NOISE_DIRS = (".agents/", ".claude/skills/", ".claude/worktrees/")
+NOISE_FILES = ("skills-lock.json", ".claude/settings.local.json")
+# An index that stages the deletion of this many files still on disk, and
+# more than half of HEAD's files, is a broken index, not work in progress.
+MASS_DELETE_MIN = 50
 
-    Captures tracked modifications, the staged index, AND untracked-but-not-
-    ignored files (a brand-new file you haven't `git add`ed is exactly the WIP
-    you'd hate to lose). Returns the new commit SHA, or None if the working
-    tree already matches HEAD (nothing to snapshot).
 
-    Works through a throwaway index via GIT_INDEX_FILE, so the user's real
-    staging area and working tree are never touched. `git add -A` in that index
-    honours .gitignore, so build junk / node_modules stay out of the snapshot.
-    """
-    git_dir = _git(dest, ["rev-parse", "--absolute-git-dir"]).stdout.strip()
-    if not git_dir:
-        return None
+def is_secret_path(path):
+    name = path.rsplit("/", 1)[-1]
+    if name in SECRET_KEEP:
+        return False
+    return name.startswith(".env") or name.endswith((".pem", ".key"))
+
+
+def is_noise_path(path):
+    p = "/" + path
+    return any("/" + d in p for d in NOISE_DIRS) or any(
+        p.endswith("/" + f) for f in NOISE_FILES
+    )
+
+
+def _index_changes(dest, base, env=None):
+    """(old mode, new mode, old sha, new sha, status, path) per index entry
+    that differs from tree `base`."""
+    out = _git(
+        dest,
+        ["diff-index", "--cached", "-z", "--no-renames", base],
+        env=env,
+        check=True,
+    ).stdout
+    fields = out.split("\0")
+    changes = []
+    for meta, path in zip(fields[::2], fields[1::2]):
+        old_mode, new_mode, old_sha, new_sha, status = meta.lstrip(":").split()
+        changes.append((old_mode, new_mode, old_sha, new_sha, status[0], path))
+    return changes
+
+
+def _worth_keeping(change):
+    old_mode, new_mode, old_sha, new_sha, status, path = change
+    added = old_mode == "000000"
+    if status == "U" or is_secret_path(path):
+        return False
+    if added and (new_mode == "160000" or is_noise_path(path)):
+        return False  # a nested clone (gitlink) or an agent tool install
+    return not (status == "M" and old_sha == new_sha)  # mode-only change
+
+
+def _tree_with(dest, git_dir, head, changes):
+    """Tree of HEAD (or empty) with `changes` applied, via a throwaway index."""
     fd, tmp_index = tempfile.mkstemp(prefix="wip-index-", dir=git_dir)
     os.close(fd)
-    # Remove the 0-byte file: git errors on an empty index file but happily
-    # creates a fresh one at a non-existent path (read-tree / add -A).
-    os.unlink(tmp_index)
+    os.unlink(tmp_index)  # git refuses an empty index file, creates a missing one
     env = {**os.environ, "GIT_INDEX_FILE": tmp_index}
-    head = has_head(dest)
+    # Mode 0 removes the entry; a deletion's sha is already the null sha.
+    lines = [f"{int(mode, 8):o} {sha}\t{path}" for _, mode, _, sha, _, path in changes]
     try:
         if head:
             _git(dest, ["read-tree", "HEAD"], env=env, check=True)
-        _git(dest, ["add", "-A"], env=env, check=True)
-        tree = _git(dest, ["write-tree"], env=env, check=True).stdout.strip()
-        if head and tree == _git(dest, ["rev-parse", "HEAD^{tree}"]).stdout.strip():
-            return None  # working tree identical to HEAD
-        parent = ["-p", "HEAD"] if head else []
-        return _git(
-            dest, ["commit-tree", tree, *parent, "-m", message], check=True
-        ).stdout.strip()
+        if lines:
+            _git(
+                dest,
+                ["update-index", "-z", "--index-info"],
+                env=env,
+                check=True,
+                input="\0".join(lines) + "\0",
+            )
+        return _git(dest, ["write-tree"], env=env, check=True).stdout.strip()
     finally:
         try:
             os.unlink(tmp_index)
         except FileNotFoundError:
             pass
+
+
+def _working_tree_changes(dest, git_dir, base, head):
+    """Changes from base to the working tree, untracked-but-not-ignored files
+    included, read through a throwaway index so the real one is untouched."""
+    fd, tmp_index = tempfile.mkstemp(prefix="wip-index-", dir=git_dir)
+    os.close(fd)
+    os.unlink(tmp_index)
+    env = {**os.environ, "GIT_INDEX_FILE": tmp_index}
+    try:
+        if head:
+            _git(dest, ["read-tree", "HEAD"], env=env, check=True)
+        # --ignore-errors: a nested repo with no commit fails only itself (rc 1).
+        added = _git(dest, ["add", "-A", "--ignore-errors"], env=env)
+        if added.returncode > 1:
+            raise subprocess.CalledProcessError(
+                added.returncode, added.args, added.stdout, added.stderr
+            )
+        return _index_changes(dest, base, env=env)
+    finally:
+        try:
+            os.unlink(tmp_index)
+        except FileNotFoundError:
+            pass
+
+
+def _mass_deletion(dest, changes, head):
+    """(deleted, total) when the index stages the deletion of most of HEAD's
+    files while they are still on disk, else None."""
+    gone = [
+        c for c in changes if c[1] == "000000" and os.path.lexists(Path(dest) / c[5])
+    ]
+    if not head or len(gone) < MASS_DELETE_MIN:
+        return None
+    total = _git(dest, ["ls-tree", "-r", "-z", "--name-only", "HEAD"]).stdout.count(
+        "\0"
+    )
+    return (len(gone), total) if len(gone) * 2 > total else None
+
+
+def snapshot_commit(dest, message):
+    """Commit the working tree and the real index without disturbing the repo.
+
+    The snapshot's tree is the working tree, untracked-but-not-ignored files
+    included. Its first parent is HEAD; when the real index holds something the
+    working tree doesn't (a staged version since edited, a staged file since
+    deleted), a commit of the index is the second parent, the way `git stash`
+    keeps it (in a repo with no commit yet, the index commit is the only
+    parent). Secrets, agent tool installs, nested clones and mode-only changes
+    are left out, and so is an index that stages the deletion of most files
+    still on disk. Returns the commit SHA, or None when nothing is left to
+    snapshot.
+    """
+    git_dir = _git(dest, ["rev-parse", "--absolute-git-dir"]).stdout.strip()
+    if not git_dir:
+        return None
+    head = has_head(dest)
+    head_tree = (
+        _git(dest, ["rev-parse", "HEAD^{tree}"]).stdout.strip()
+        if head
+        else _tree_with(dest, git_dir, False, [])
+    )
+    work = [
+        c
+        for c in _working_tree_changes(dest, git_dir, head_tree, head)
+        if _worth_keeping(c)
+    ]
+    staged = [c for c in _index_changes(dest, head_tree) if _worth_keeping(c)]
+    mass = _mass_deletion(dest, staged, head)
+    if mass:
+        print(
+            f"  {Path(dest).name}: index stages deletion of {mass[0]} of {mass[1]}"
+            " files still on disk; leaving the index out of the snapshot"
+        )
+        staged = []
+    tree = _tree_with(dest, git_dir, head, work)
+    index_tree = _tree_with(dest, git_dir, head, staged)
+    if tree == head_tree and index_tree == head_tree:
+        return None
+    parents = ["-p", "HEAD"] if head else []
+    if index_tree not in (head_tree, tree):
+        subject = message.split("\n", 1)[0]
+        index_commit = _git(
+            dest,
+            ["commit-tree", index_tree, *parents, "-m", f"index of {subject}"],
+            check=True,
+        ).stdout.strip()
+        parents += ["-p", index_commit]
+    return _git(
+        dest, ["commit-tree", tree, *parents, "-m", message], check=True
+    ).stdout.strip()
+
+
+def snapshot_message(dest, hostname):
+    """Subject kept as before (older readers match it); the body says where
+    the snapshot came from."""
+    dest = Path(dest)
+    branch = _git(dest, ["symbolic-ref", "-q", "--short", "HEAD"]).stdout.strip()
+    upstream = _git(
+        dest, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]
+    ).stdout.strip()
+    try:
+        checkout = str(dest.resolve().relative_to(GH_DIR.resolve()))
+    except ValueError:
+        checkout = str(dest)
+    return (
+        f"wip snapshot ({hostname})\n\n"
+        f"branch: {branch or '(detached)'}\n"
+        f"checkout: {checkout}\n"
+        f"upstream: {upstream or 'none'}\n"
+    )
 
 
 def origin_has_real_branch(dest):
@@ -482,14 +640,35 @@ def origin_has_real_branch(dest):
     return any(not h.startswith("refs/heads/wip/") for h in heads)
 
 
+def _snapshot_trees(dest, ref):
+    """The snapshot's tree and its index parent's tree (if any); [] if no ref."""
+    trees = []
+    for rev in (f"{ref}^{{tree}}", f"{ref}^2^{{tree}}"):
+        res = _git(dest, ["rev-parse", "--verify", "-q", rev])
+        if res.returncode != 0:
+            break
+        trees.append(res.stdout.strip())
+    return trees
+
+
+def on_a_remote_branch(dest, rev="HEAD"):
+    """True when a remote-tracking branch other than wip/* contains rev."""
+    out = _git(
+        dest,
+        ["for-each-ref", "--contains", rev, "--format=%(refname)", "refs/remotes/"],
+    ).stdout.split()
+    names = [r.split("/", 3)[3] for r in out if r.count("/") >= 3]
+    return any(n != "HEAD" and not n.startswith("wip/") for n in names)
+
+
 def push_wip(name, dest, hostname):
     """Push a snapshot of working state to wip/<hostname> on origin.
 
-    Captures tracked changes, the index, and untracked-but-not-ignored files
-    via snapshot_commit. When the tree is clean, points wip/<host> at HEAD so
-    unpushed *commits* are captured too. Force-push because wip refs always
-    replace the previous snapshot. Linked worktrees push to a suffixed
-    wip/<host>@<dirname> branch so siblings never clobber each other's
+    Pushes only what origin lacks: local changes (snapshot_commit), or commits
+    on no remote branch (wip points at HEAD). Otherwise deletes this checkout's
+    own wip ref, which would only repeat what origin has. Force-push because
+    wip refs always replace the previous snapshot. Linked worktrees push to a
+    suffixed wip/<host>@<dirname> branch so siblings never clobber each other's
     snapshot. Skips detached HEAD and mid-rebase/merge/cherry-pick (state
     isn't a coherent snapshot to share).
     """
@@ -506,21 +685,27 @@ def push_wip(name, dest, hostname):
         return
 
     branch = f"wip/{hostname}{wip_ref_suffix(dest)}"
-    snap = snapshot_commit(dest, f"wip snapshot ({hostname})")
+    cached_ref = f"refs/remotes/origin/{branch}"
+    snap = snapshot_commit(dest, snapshot_message(dest, hostname))
+    if snap:
+        ref, suffix = snap, " (snapshot of working tree)"
+    elif has_head(dest) and not on_a_remote_branch(dest):
+        ref, suffix = "HEAD", ""
+    else:
+        if _git(dest, ["rev-parse", "--verify", "-q", cached_ref]).returncode == 0:
+            done = _git(dest, ["push", "origin", "--delete", branch])
+            if done.returncode == 0:
+                print(f"  {name}: deleted {branch} (nothing origin lacks)")
+            elif "remote ref does not exist" in done.stderr:
+                _git(dest, ["update-ref", "-d", cached_ref])
+        return
 
-    # Clean tree: point wip at HEAD so unpushed commits are captured too.
-    ref, suffix = (snap, " (snapshot of working tree)") if snap else ("HEAD", "")
     # Skip when origin's wip ref already holds these files. Compare trees, not
     # SHAs: a snapshot commit's SHA changes every run (fresh timestamp), so a
     # SHA check re-pushed every dirty repo every sweep. The remote-tracking ref
     # is updated by our own push. A wip branch deleted on origin stays cached
     # until a `fetch --prune`; until then an unchanged repo isn't re-pushed.
-    cached = _git(
-        dest,
-        ["rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}^{{tree}}"],
-    )
-    tree = _git(dest, ["rev-parse", f"{ref}^{{tree}}"]).stdout.strip()
-    if cached.returncode == 0 and cached.stdout.strip() == tree:
+    if _snapshot_trees(dest, cached_ref) == _snapshot_trees(dest, ref):
         return  # nothing new
 
     push = _git(dest, ["push", "--force", "origin", f"{ref}:refs/heads/{branch}"])
@@ -547,7 +732,7 @@ def bundle_wip(name, dest, hostname, bundle_dir):
         print(f"  {name}: skipping bundle (in-progress {op})")
         return
 
-    snap = snapshot_commit(dest, f"wip snapshot ({hostname})")
+    snap = snapshot_commit(dest, snapshot_message(dest, hostname))
     target = snap or ("HEAD" if has_head(dest) else None)
     if target is None:
         return  # empty repo, nothing to bundle
