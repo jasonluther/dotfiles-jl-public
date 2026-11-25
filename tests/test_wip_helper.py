@@ -211,3 +211,32 @@ def test_own_host_bundle_excluded(tmp_path, monkeypatch):
     monkeypatch.chdir(A)
     assert wip.gather_snapshots("hostA") == {}
     assert "hostA" in wip.gather_snapshots("hostB")
+
+
+def test_apply_from_bundle_whose_base_the_receiver_has_not_fetched(
+    tmp_path, monkeypatch
+):
+    # A bundle is relative to origin's default branch as the sender last saw
+    # it; a receiver that hasn't fetched since lacks that prerequisite.
+    bare = tmp_path / "o.git"
+    subprocess.run(["git", "init", "-q", "-b", "main", "--bare", str(bare)], check=True)
+    home_a, home_b = tmp_path / "A", tmp_path / "B"
+    seed = init_repo(tmp_path / "seed", origin=bare)
+    commit_file(seed, "a.txt", "hello")
+    git(seed, "push", "-q", "origin", "main")
+    B = clone(bare, home_b / "proj" / "myrepo")
+    A = clone(bare, home_a / "proj" / "myrepo")
+    commit_file(A, "b.txt", "on main later")
+    git(A, "push", "-q", "origin", "main")
+    (A / "wipfile.txt").write_text("from A")
+    bundles = tmp_path / "bundles"
+    monkeypatch.setenv("HOME", str(home_a))
+    sg.bundle_wip("myrepo", A, "hostA", bundles)
+
+    monkeypatch.setenv("HOME", str(home_b))
+    monkeypatch.setattr(wip, "WIP_BUNDLE_DIR", bundles)
+    monkeypatch.chdir(B)
+    assert "hostA" in wip.gather_snapshots("hostB")
+    git(B, "merge", "-q", "--ff-only", "origin/main")
+    assert wip.cmd_apply("hostB", "hostA", force=False) == 0
+    assert (B / "wipfile.txt").read_text() == "from A"

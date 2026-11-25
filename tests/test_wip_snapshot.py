@@ -1158,3 +1158,160 @@ def test_push_wip_asks_origin_once_per_head(tmp_path, monkeypatch):
     sg.push_wip("r", r, "hostx")
     assert len(calls) == 1
     assert "refs/heads/wip/hostx" not in remote_refs(bare)
+
+
+# ---------- what a bundle holds ----------
+#
+# Each bundle carried the whole repo: every tag, branch and every other
+# worktree's wip ref. One snapshot appeared in up to 28 bundles, and the
+# folder reached 11 GB in ~300 files.
+
+
+def _cloned(tmp_path, name="r"):
+    bare = tmp_path / "origin.git"
+    seed = init_repo(tmp_path / "seed")
+    commit_file(seed, "a.txt", "hello")
+    git(tmp_path, "clone", "-q", "--bare", str(seed), str(bare))
+    r = tmp_path / name
+    git(tmp_path, "clone", "-q", str(bare), str(r))
+    git(r, "config", "user.email", "t@t.test")
+    git(r, "config", "user.name", "Test")
+    return bare, r
+
+
+def bundle_heads(bundle):
+    out = git(bundle.parent, "bundle", "list-heads", str(bundle)).stdout
+    return {line.split(" ", 1)[1] for line in out.splitlines()}
+
+
+def test_bundle_holds_only_its_own_snapshot_ref(tmp_path):
+    _, r = _cloned(tmp_path)
+    git(r, "tag", "v1")
+    git(r, "branch", "other")
+    wt = tmp_path / "r-wt"
+    git(r, "worktree", "add", "-q", "-b", "side", str(wt))
+    (wt / "w.txt").write_text("x")
+    (r / "m.txt").write_text("y")
+    bundles = tmp_path / "bundles"
+    sg.bundle_wip("r-wt", wt, "hostx", bundles)
+    sg.bundle_wip("r", r, "hostx", bundles)
+    assert bundle_heads(bundles / f"{sg.bundle_key(r)}@hostx.bundle") == {
+        "refs/wip/hostx"
+    }
+
+
+def test_bundle_is_relative_to_origins_default_branch(tmp_path):
+    _, r = _cloned(tmp_path)
+    (r / "m.txt").write_text("y")
+    bundles = tmp_path / "bundles"
+    sg.bundle_wip("r", r, "hostx", bundles)
+    bundle = bundles / f"{sg.bundle_key(r)}@hostx.bundle"
+    verify = git(r, "bundle", "verify", str(bundle))
+    base = git(r, "rev-parse", "origin/main").stdout.strip()
+    assert "requires this ref" in verify.stdout + verify.stderr
+    assert base in verify.stdout + verify.stderr
+
+
+def test_bundle_without_an_origin_default_branch_is_full(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    (r / "m.txt").write_text("y")
+    bundles = tmp_path / "bundles"
+    sg.bundle_wip("r", r, "hostx", bundles)
+    bundle = bundles / f"{sg.bundle_key(r)}@hostx.bundle"
+    verify = git(r, "bundle", "verify", str(bundle))
+    assert "complete history" in verify.stdout + verify.stderr
+    assert bundle_heads(bundle) == {"refs/wip/hostx"}
+
+
+def test_bundle_clean_checkout_on_origin_removes_its_own_bundle(tmp_path):
+    _, r = _cloned(tmp_path)
+    (r / "m.txt").write_text("y")
+    bundles = tmp_path / "bundles"
+    sg.bundle_wip("r", r, "hostx", bundles)
+    bundle = bundles / f"{sg.bundle_key(r)}@hostx.bundle"
+    assert bundle.is_file()
+    (r / "m.txt").unlink()
+    sg.bundle_wip("r", r, "hostx", bundles)
+    assert not bundle.exists()
+    sg.bundle_wip("r", r, "hostx", bundles)  # nothing to remove: no error
+    assert not bundle.exists()
+
+
+def test_bundle_clean_checkout_with_unpushed_commit_is_bundled(tmp_path):
+    _, r = _cloned(tmp_path)
+    commit_file(r, "b.txt", "two", msg="unpushed")
+    bundles = tmp_path / "bundles"
+    sg.bundle_wip("r", r, "hostx", bundles)
+    bundle = bundles / f"{sg.bundle_key(r)}@hostx.bundle"
+    clone = tmp_path / "check"
+    git(tmp_path, "clone", "-q", str(tmp_path / "origin.git"), str(clone))
+    git(clone, "fetch", "-q", str(bundle), "refs/wip/hostx:refs/x")
+    assert git(clone, "show", "refs/x:b.txt").stdout == "two"
+
+
+def test_bundle_dirty_unchanged_is_not_rewritten(tmp_path):
+    # A snapshot commit gets a fresh SHA every run, so a signature over it
+    # rewrote every dirty repo's bundle every five minutes.
+    _, r = _cloned(tmp_path)
+    (r / "m.txt").write_text("y")
+    bundles = tmp_path / "bundles"
+    sg.bundle_wip("r", r, "hostx", bundles)
+    bundle = bundles / f"{sg.bundle_key(r)}@hostx.bundle"
+    first = bundle.stat().st_mtime_ns
+    time.sleep(1.1)  # commit timestamps have 1s resolution
+    sg.bundle_wip("r", r, "hostx", bundles)
+    assert bundle.stat().st_mtime_ns == first
+    (r / "m.txt").write_text("z")
+    sg.bundle_wip("r", r, "hostx", bundles)
+    assert bundle.stat().st_mtime_ns != first
+
+
+# ---------- bundle folder clean-up ----------
+
+
+def test_bundle_prune_covers_a_removed_worktree(tmp_path):
+    root = tmp_path / "root"
+    r = init_repo(root / "r")
+    commit_file(r, "a.txt", "hello")
+    wt = root / "r-wt"
+    git(r, "worktree", "add", "-q", "-b", "side", str(wt))
+    (wt / "w.txt").write_text("x")
+    (r / "m.txt").write_text("y")
+    bundles = tmp_path / "bundles"
+    sg.bundle_wip("r-wt", wt, "hostx", bundles)
+    sg.bundle_wip("r", r, "hostx", bundles)
+    wt_bundle = bundles / f"{sg.bundle_key(wt)}@hostx.bundle"
+    main_bundle = bundles / f"{sg.bundle_key(r)}@hostx.bundle"
+    git(r, "worktree", "remove", "--force", str(wt))
+    old = time.time() - 40 * 86400
+    for b in (wt_bundle, main_bundle):
+        os.utime(b, (old, old))
+    sg.prune_wip_bundles("hostx", [root], bundles)
+    assert not wt_bundle.exists()
+    assert main_bundle.is_file()
+
+
+def test_tidy_removes_conflict_copies_and_stale_locks(tmp_path):
+    bundles = tmp_path / "bundles"
+    bundles.mkdir()
+    old = time.time() - 2 * 86400
+    conflict = bundles / "k@hosty.sync-conflict-20261101-120000-ABCDEFG.bundle"
+    stale_lock = bundles / "k@hostx.bundle.tmp.lock"
+    stale_tmp = bundles / "j@hostx.bundle.tmp"
+    fresh_lock = bundles / "f@hostx.bundle.tmp.lock"
+    keep = bundles / "k@hostx.bundle"
+    for f in (conflict, stale_lock, stale_tmp, fresh_lock, keep):
+        f.write_bytes(b"x")
+    for f in (stale_lock, stale_tmp, keep):
+        os.utime(f, (old, old))
+    sg.tidy_bundle_dir(bundles)
+    assert not conflict.exists()
+    assert not stale_lock.exists()
+    assert not stale_tmp.exists()
+    assert fresh_lock.exists()  # may be a bundle being written right now
+    assert keep.exists()
+
+
+def test_tidy_without_a_bundle_dir_is_quiet(tmp_path):
+    sg.tidy_bundle_dir(tmp_path / "missing")

@@ -119,9 +119,18 @@ def gather_snapshots(this_host):
             ]
             if not wip_refs:
                 continue
-            fetched = git(
-                ["fetch", "-q", str(bundle), f"+{wip_refs[0]}:refs/wip-remote/{host}"]
-            )
+            fetch = [
+                "fetch",
+                "-q",
+                str(bundle),
+                f"+{wip_refs[0]}:refs/wip-remote/{host}",
+            ]
+            fetched = git(fetch)
+            if fetched.returncode != 0 and has_origin():
+                # The bundle's base is origin's default branch as the sender
+                # last saw it; fetch origin for it, then try again.
+                git(["fetch", "-q", "origin"])
+                fetched = git(fetch)
             if fetched.returncode == 0:
                 snaps[host] = f"refs/wip-remote/{host}"
     return snaps
