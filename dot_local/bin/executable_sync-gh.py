@@ -867,9 +867,11 @@ def bundle_wip(name, dest, hostname, bundle_dir):
     The bundle holds only this checkout's snapshot ref (refs/wip/<host>,
     suffixed in a linked worktree), with origin's default branch as its
     prerequisite so history origin has isn't repeated; with no origin default
-    branch it carries the snapshot's full history. Like push_wip, it holds
-    only what origin lacks: local changes, or commits on no remote branch;
-    otherwise this checkout's own bundle is removed.
+    branch, or when origin isn't on GitHub (so other machines can't fetch
+    the base), it carries the snapshot's full history. Other local branches
+    and tags are not carried. With a GitHub origin it holds only what origin
+    lacks: local changes, or commits on no remote branch; otherwise this
+    checkout's own bundle is removed.
 
     Per-host filename (`<repo>@<host>.bundle`) so two machines never write the
     same file. Skips re-bundling when nothing changed since the last run.
@@ -889,12 +891,18 @@ def bundle_wip(name, dest, hostname, bundle_dir):
 
     snap = snapshot_commit(dest, snapshot_message(dest, hostname))
     head = has_head(dest)
-    on_origin = head_on_origin(dest, hostname) if head and not snap else None
+    # Only a GitHub origin is one every other machine can fetch from.
+    github = bool(origin_slug(dest))
+    on_origin = (
+        head_on_origin(dest, hostname) if head and github and not snap else False
+    )
     if snap:
         target = snap
-    elif head and on_origin is None:
+    elif not head:
+        return  # nothing committed, or HEAD unreadable: leave the bundle alone
+    elif on_origin is None:
         return  # origin can't be asked: keep the bundle as it is
-    elif head and not on_origin:
+    elif not on_origin:
         target = "HEAD"
     else:
         if bundle_path.is_file():
@@ -912,8 +920,7 @@ def bundle_wip(name, dest, hostname, bundle_dir):
         return  # unchanged and bundle already present
 
     _git(dest, ["update-ref", wip_ref, target], check=True)
-    # Only a GitHub origin can supply the base on every other machine.
-    base = origin_default_branch(dest) if origin_slug(dest) else None
+    base = origin_default_branch(dest) if github else None
     bundle_dir.mkdir(parents=True, exist_ok=True)
     tmp_path = bundle_path.with_name(bundle_path.name + ".tmp")
     revs = [wip_ref, f"^{base}"] if base else [wip_ref]

@@ -1225,7 +1225,8 @@ def test_bundle_without_an_origin_default_branch_is_full(tmp_path):
     assert bundle_heads(bundle) == {"refs/wip/hostx"}
 
 
-def test_bundle_clean_checkout_on_origin_removes_its_own_bundle(tmp_path):
+def test_bundle_clean_checkout_on_origin_removes_its_own_bundle(tmp_path, monkeypatch):
+    monkeypatch.setattr(sg, "origin_slug", lambda dest: "me/r")
     _, r = _cloned(tmp_path)
     (r / "m.txt").write_text("y")
     bundles = tmp_path / "bundles"
@@ -1329,7 +1330,8 @@ def test_bundle_with_an_origin_only_this_machine_reaches_is_full(tmp_path):
     assert "complete history" in verify.stdout + verify.stderr
 
 
-def test_bundle_keeps_commits_on_a_branch_gone_from_origin(tmp_path):
+def test_bundle_keeps_commits_on_a_branch_gone_from_origin(tmp_path, monkeypatch):
+    monkeypatch.setattr(sg, "origin_slug", lambda dest: "me/r")
     # --wip-only never fetches, so origin/feature can outlive the branch.
     bare, r = _cloned(tmp_path)
     git(r, "checkout", "-q", "-b", "feature")
@@ -1342,7 +1344,8 @@ def test_bundle_keeps_commits_on_a_branch_gone_from_origin(tmp_path):
     assert bundle.is_file()
 
 
-def test_bundle_kept_when_origin_cannot_be_asked(tmp_path):
+def test_bundle_kept_when_origin_cannot_be_asked(tmp_path, monkeypatch):
+    monkeypatch.setattr(sg, "origin_slug", lambda dest: "me/r")
     _, r = _cloned(tmp_path)
     git(r, "checkout", "-q", "-b", "feature")
     commit_file(r, "b.txt", "two")
@@ -1372,3 +1375,30 @@ def test_tidy_goes_on_past_a_file_it_cannot_remove(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "unlink", unlink)
     sg.tidy_bundle_dir(bundles)
     assert not b.exists()
+
+
+def test_bundle_of_a_clean_checkout_with_a_local_origin_is_kept(tmp_path):
+    # Other machines can't reach a local-path origin, so it vouches for nothing.
+    _, r = _cloned(tmp_path)
+    bundles = tmp_path / "bundles"
+    sg.bundle_wip("r", r, "hostx", bundles)
+    bundle = bundles / f"{sg.bundle_key(r)}@hostx.bundle"
+    assert bundle.is_file()
+    assert (
+        "complete history"
+        in git(r, "bundle", "verify", str(bundle)).stderr
+        + git(r, "bundle", "verify", str(bundle)).stdout
+    )
+
+
+def test_bundle_is_not_removed_when_head_cannot_be_read(tmp_path, monkeypatch):
+    monkeypatch.setattr(sg, "origin_slug", lambda dest: "me/r")
+    _, r = _cloned(tmp_path)
+    (r / "m.txt").write_text("y")
+    bundles = tmp_path / "bundles"
+    sg.bundle_wip("r", r, "hostx", bundles)
+    bundle = bundles / f"{sg.bundle_key(r)}@hostx.bundle"
+    monkeypatch.setattr(sg, "snapshot_commit", lambda dest, message: None)
+    monkeypatch.setattr(sg, "has_head", lambda dest: False)
+    sg.bundle_wip("r", r, "hostx", bundles)
+    assert bundle.is_file()
