@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """wip — pick up work-in-progress snapshots from your other machines.
 
-Companion to `sync-gh.py --wip-only`, which continuously snapshots each repo's
-working tree to a `wip/<host>` branch (private GitHub repos) or a git bundle in
-~/.local/share/wip-bundles (public / local-only / ~/Projects repos). Run inside
-a repo:
+Companion to `sync-gh.py --wip-only`, which snapshots each repo's local
+changes and unpushed commits (never secrets) to a `wip/<host>` branch (private
+GitHub repos) or a git bundle in ~/.local/share/wip-bundles (public /
+local-only / ~/Projects repos). Run inside a repo:
 
     wip                list snapshots from OTHER hosts (age, diffstat)
     wip diff  <host>   show the full diff a host's snapshot would apply
@@ -16,7 +16,7 @@ that full name to diff/apply.
 `apply` never silently clobbers: it refuses on a dirty working tree unless
 --force, and even then applies via `git apply --3way`, which leaves conflict
 markers rather than overwriting. Your own WIP is separately snapshotted by the
-wip loop, so nothing is ever lost.
+wip loop.
 """
 
 import argparse

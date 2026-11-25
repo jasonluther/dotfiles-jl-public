@@ -185,7 +185,8 @@ def clone_repo(name, url, dest):
 def pull_repo(name, dest):
     """Pull latest changes for an existing repo."""
     result = subprocess.run(
-        ["git", "-C", str(dest), "pull", "--ff-only"],
+        # --prune: a branch deleted on origin must not still count as "on origin".
+        ["git", "-C", str(dest), "pull", "--ff-only", "--prune"],
         check=False,
         capture_output=True,
         text=True,
@@ -427,7 +428,7 @@ def prune_wip_bundles(hostname, roots, bundle_dir):
 
 # Never snapshotted, whatever the repo's .gitignore says. A tracked one keeps
 # its committed version, so a snapshot never carries a newer secret.
-SECRET_KEEP = (".env.example", ".env.sample")
+SECRET_KEEP = (".env.example", ".env.sample", ".env.template")
 # Agent tool installs: left out unless the repo already tracks the path.
 NOISE_DIRS = (".agents/", ".claude/skills/", ".claude/worktrees/")
 NOISE_FILES = ("skills-lock.json", ".claude/settings.local.json")
@@ -437,17 +438,23 @@ MASS_DELETE_MIN = 50
 
 
 def is_secret_path(path):
-    name = path.rsplit("/", 1)[-1]
+    name = path.rsplit("/", 1)[-1].lower()
     if name in SECRET_KEEP:
         return False
     return name.startswith(".env") or name.endswith((".pem", ".key"))
 
 
-def is_noise_path(path):
+def noise_prefix(path):
+    """The agent-install entry `path` falls in (the folder's first-level
+    entry, e.g. .claude/skills/<name>), or the noise file itself; else None."""
     p = "/" + path
-    return any("/" + d in p for d in NOISE_DIRS) or any(
-        p.endswith("/" + f) for f in NOISE_FILES
-    )
+    for d in NOISE_DIRS:
+        at = p.find("/" + d)
+        if at >= 0:
+            start = at + len(d)
+            end = path.find("/", start)
+            return path if end < 0 else path[:end]
+    return path if any(p.endswith("/" + f) for f in NOISE_FILES) else None
 
 
 def _index_changes(dest, base, env=None):
@@ -467,14 +474,31 @@ def _index_changes(dest, base, env=None):
     return changes
 
 
-def _worth_keeping(change):
+def _worth_keeping(change, is_install=lambda path: False):
     old_mode, new_mode, old_sha, new_sha, status, path = change
     added = old_mode == "000000"
     if status == "U" or is_secret_path(path):
         return False
-    if added and (new_mode == "160000" or is_noise_path(path)):
+    if added and (new_mode == "160000" or is_install(path)):
         return False  # a nested clone (gitlink) or an agent tool install
     return not (status == "M" and old_sha == new_sha)  # mode-only change
+
+
+def _install_check(dest, staged_paths):
+    """is_install(path) for working-tree files: a new file in an agent-install
+    folder, unless it is staged or HEAD already tracks that folder."""
+    tracked = {}
+
+    def is_install(path):
+        prefix = noise_prefix(path)
+        if prefix is None or path in staged_paths:
+            return False
+        if prefix not in tracked:
+            out = _git(dest, ["ls-tree", "-r", "--name-only", "HEAD", "--", prefix])
+            tracked[prefix] = bool(out.stdout.strip())
+        return not tracked[prefix]
+
+    return is_install
 
 
 def _tree_with(dest, git_dir, head, changes):
@@ -504,6 +528,17 @@ def _tree_with(dest, git_dir, head, changes):
             pass
 
 
+def _only_nested_repo_errors(dest, stderr):
+    """True when every `git add` error names a nested repo (one with no
+    commit can't be added as a gitlink), so no real edit was dropped."""
+    errors = [line for line in stderr.splitlines() if line.startswith("error:")]
+    for line in errors:
+        m = re.search(r"'(.+)/'", line)
+        if not m or not (Path(dest) / m.group(1) / ".git").exists():
+            return False
+    return bool(errors)
+
+
 def _working_tree_changes(dest, git_dir, base, head):
     """Changes from base to the working tree, untracked-but-not-ignored files
     included, read through a throwaway index so the real one is untouched."""
@@ -516,7 +551,7 @@ def _working_tree_changes(dest, git_dir, base, head):
             _git(dest, ["read-tree", "HEAD"], env=env, check=True)
         # --ignore-errors: a nested repo with no commit fails only itself (rc 1).
         added = _git(dest, ["add", "-A", "--ignore-errors"], env=env)
-        if added.returncode > 1:
+        if added.returncode and not _only_nested_repo_errors(dest, added.stderr):
             raise subprocess.CalledProcessError(
                 added.returncode, added.args, added.stdout, added.stderr
             )
@@ -564,12 +599,13 @@ def snapshot_commit(dest, message):
         if head
         else _tree_with(dest, git_dir, False, [])
     )
+    staged = [c for c in _index_changes(dest, head_tree) if _worth_keeping(c)]
+    is_install = _install_check(dest, {c[5] for c in staged})
     work = [
         c
         for c in _working_tree_changes(dest, git_dir, head_tree, head)
-        if _worth_keeping(c)
+        if _worth_keeping(c, is_install)
     ]
-    staged = [c for c in _index_changes(dest, head_tree) if _worth_keeping(c)]
     mass = _mass_deletion(dest, staged, head)
     if mass:
         print(
@@ -641,24 +677,61 @@ def origin_has_real_branch(dest):
 
 
 def _snapshot_trees(dest, ref):
-    """The snapshot's tree and its index parent's tree (if any); [] if no ref."""
-    trees = []
-    for rev in (f"{ref}^{{tree}}", f"{ref}^2^{{tree}}"):
-        res = _git(dest, ["rev-parse", "--verify", "-q", rev])
-        if res.returncode != 0:
-            break
-        trees.append(res.stdout.strip())
+    """Trees of the snapshot and of its parents other than HEAD (the index
+    commit), for comparing two snapshots; [] when ref doesn't exist."""
+    shown = _git(dest, ["show", "-s", "--format=%T %P", ref, "--"])
+    if shown.returncode != 0:
+        return []
+    tree, *parents = shown.stdout.split()
+    head = _git(dest, ["rev-parse", "-q", "--verify", "HEAD"]).stdout.strip()
+    trees = [tree]
+    for p in parents:
+        if p != head:
+            trees.append(_git(dest, ["rev-parse", f"{p}^{{tree}}"]).stdout.strip())
     return trees
 
 
-def on_a_remote_branch(dest, rev="HEAD"):
-    """True when a remote-tracking branch other than wip/* contains rev."""
+def _origin_branches_with(dest, rev="HEAD"):
+    """{name: sha} of origin's remote-tracking branches (not wip/*) that
+    contain rev."""
     out = _git(
         dest,
-        ["for-each-ref", "--contains", rev, "--format=%(refname)", "refs/remotes/"],
-    ).stdout.split()
-    names = [r.split("/", 3)[3] for r in out if r.count("/") >= 3]
-    return any(n != "HEAD" and not n.startswith("wip/") for n in names)
+        [
+            "for-each-ref",
+            "--contains",
+            rev,
+            "--format=%(refname:strip=3) %(objectname)",
+            "refs/remotes/origin/",
+        ],
+    ).stdout
+    found = dict(line.split(" ", 1) for line in out.splitlines() if " " in line)
+    return {
+        n: sha for n, sha in found.items() if n != "HEAD" and not n.startswith("wip/")
+    }
+
+
+def on_a_remote_branch(dest, rev="HEAD"):
+    """True when one of origin's branches (as last fetched) contains rev."""
+    return bool(_origin_branches_with(dest, rev))
+
+
+def _confirmed_on_origin(dest):
+    """Ask origin whether a branch that contained HEAD when last fetched is
+    still there at that commit (or one past it). None when origin can't be
+    asked."""
+    cached = _origin_branches_with(dest)
+    listing = _git(dest, ["ls-remote", "--heads", "origin"])
+    if listing.returncode != 0:
+        return None
+    for line in listing.stdout.splitlines():
+        sha, _, ref = line.partition("\t")
+        name = ref.removeprefix("refs/heads/")
+        if name in cached and (
+            sha == cached[name]
+            or _git(dest, ["merge-base", "--is-ancestor", "HEAD", sha]).returncode == 0
+        ):
+            return True
+    return False
 
 
 def push_wip(name, dest, hostname):
@@ -691,14 +764,24 @@ def push_wip(name, dest, hostname):
         ref, suffix = snap, " (snapshot of working tree)"
     elif has_head(dest) and not on_a_remote_branch(dest):
         ref, suffix = "HEAD", ""
+    elif _git(dest, ["rev-parse", "--verify", "-q", cached_ref]).returncode != 0:
+        return  # nothing origin lacks, and no wip ref to delete
     else:
-        if _git(dest, ["rev-parse", "--verify", "-q", cached_ref]).returncode == 0:
+        # Deleting is the one step that can lose work: check origin itself,
+        # since tracking refs go stale when a branch is deleted there.
+        confirmed = _confirmed_on_origin(dest) if has_head(dest) else True
+        if confirmed is None:
+            return  # origin unreachable: decide next sweep
+        if confirmed:
             done = _git(dest, ["push", "origin", "--delete", branch])
             if done.returncode == 0:
                 print(f"  {name}: deleted {branch} (nothing origin lacks)")
             elif "remote ref does not exist" in done.stderr:
                 _git(dest, ["update-ref", "-d", cached_ref])
-        return
+            else:
+                print(f"  {name}: could not delete {branch} ({done.stderr.strip()})")
+            return
+        ref, suffix = "HEAD", ""
 
     # Skip when origin's wip ref already holds these files. Compare trees, not
     # SHAs: a snapshot commit's SHA changes every run (fresh timestamp), so a

@@ -1017,3 +1017,110 @@ def test_in_progress_op_outside_a_repo_is_none(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "MERGE_HEAD").write_text("x")
     assert sg.in_progress_op(tmp_path / "missing") is None
+
+
+# ---------- review fixes ----------
+
+
+def test_snapshot_fails_loudly_when_a_file_cannot_be_read(tmp_path):
+    # --ignore-errors must only forgive a nested repo, not hide a lost edit.
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    (r / "a.txt").write_text("edited")
+    (r / "a.txt").chmod(0)
+    try:
+        with pytest.raises(subprocess.CalledProcessError):
+            sg.snapshot_commit(r, "m")
+    finally:
+        (r / "a.txt").chmod(0o644)
+
+
+def test_snapshot_keeps_new_files_in_a_repos_own_skill(tmp_path):
+    r = init_repo(tmp_path / "r")
+    (r / ".claude" / "skills" / "mine").mkdir(parents=True)
+    commit_file(r, ".claude/skills/mine/SKILL.md", "v1")
+    (r / ".claude/skills/mine/notes.md").write_text("new file in my skill")
+    (r / ".claude" / "skills" / "new").mkdir()
+    (r / ".claude/skills/new/SKILL.md").write_text("a new skill")
+    files = ls_tree_files(r, sg.snapshot_commit(r, "m"))
+    assert ".claude/skills/mine/notes.md" in files
+    # A new skill folder looks like an install until it is staged.
+    assert ".claude/skills/new/SKILL.md" not in files
+    git(r, "add", ".claude/skills/new/SKILL.md")
+    sha = sg.snapshot_commit(r, "m")
+    assert ".claude/skills/new/SKILL.md" in ls_tree_files(r, sha)
+
+
+def test_snapshot_keeps_a_staged_file_in_an_agent_folder(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    (r / ".agents").mkdir()
+    (r / ".agents" / "AGENTS.md").write_text("mine")
+    git(r, "add", "-f", ".agents/AGENTS.md")
+    sha = sg.snapshot_commit(r, "m")
+    assert ".agents/AGENTS.md" in ls_tree_files(r, sha)
+
+
+def test_snapshot_secret_names_ignore_case_and_keep_templates(tmp_path):
+    r = init_repo(tmp_path / "r")
+    commit_file(r, "a.txt", "hello")
+    (r / ".ENV").write_text("SECRET")
+    (r / "Server.PEM").write_text("SECRET")
+    (r / ".env.template").write_text("fine")
+    files = ls_tree_files(r, sg.snapshot_commit(r, "m"))
+    assert ".env.template" in files
+    assert not files & {".ENV", "Server.PEM"}
+
+
+def test_push_wip_commit_only_on_another_remote_is_pushed(tmp_path):
+    bare, r = _origin_and_clone(tmp_path)
+    up = tmp_path / "upstream.git"
+    git(tmp_path, "init", "-q", "--bare", str(up), check=False)
+    git(r, "remote", "add", "upstream", str(up))
+    commit_file(r, "b.txt", "two")
+    git(r, "push", "-q", "upstream", "main")
+    sg.push_wip("r", r, "hostx")
+    assert tree_of(bare, "refs/heads/wip/hostx") == tree_of(r, "HEAD")
+
+
+def test_push_wip_keeps_wip_ref_when_the_branch_is_gone_from_origin(tmp_path):
+    # A stale tracking ref (branch deleted on GitHub) still "contains" HEAD.
+    bare, r = _origin_and_clone(tmp_path)
+    git(r, "checkout", "-q", "-b", "feature")
+    commit_file(r, "b.txt", "two")
+    git(r, "push", "-q", "-u", "origin", "feature")
+    (r / "w.txt").write_text("x")
+    sg.push_wip("r", r, "hostx")
+    (r / "w.txt").unlink()
+    git(bare, "branch", "-D", "feature")  # deleted on origin, still cached here
+    sg.push_wip("r", r, "hostx")
+    assert "refs/heads/wip/hostx" in remote_refs(bare)
+
+
+def test_push_wip_unborn_repo_repushes_when_only_the_index_changed(tmp_path):
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "-q", "--bare", str(bare), check=False)
+    seed = init_repo(tmp_path / "seed", origin=bare)
+    commit_file(seed, "a.txt", "hello")
+    git(seed, "push", "-q", "origin", "main")
+    r = init_repo(tmp_path / "r", origin=bare)
+    git(r, "fetch", "-q", "origin")
+    (r / "n.txt").write_text("v1")
+    git(r, "add", "n.txt")
+    (r / "n.txt").write_text("v2")
+    sg.push_wip("r", r, "hostx")
+    (r / "n.txt").write_text("v1b")
+    git(r, "add", "n.txt")
+    (r / "n.txt").write_text("v2")
+    sg.push_wip("r", r, "hostx")
+    assert git(bare, "show", "refs/heads/wip/hostx^:n.txt").stdout == "v1b"
+
+
+def test_pull_prunes_deleted_remote_branches(tmp_path):
+    bare, r = _origin_and_clone(tmp_path)
+    git(r, "config", "fetch.prune", "false")  # a user default must not decide it
+    git(r, "push", "-q", "origin", "main:gone")
+    git(r, "fetch", "-q", "origin")
+    git(bare, "branch", "-D", "gone")
+    sg.pull_repo("r", r)
+    assert git(r, "rev-parse", "-q", "--verify", "origin/gone", check=False).returncode
