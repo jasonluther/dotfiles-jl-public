@@ -8,7 +8,8 @@ the one before when it is a continuation: the line before ends in `\\`, the
 line is indented at least 2 columns deeper than the first (1 deeper means
 the copy started a column into the indent), or its first word would not
 have fit in the terminal's width after the line before (where the terminal
-wrapped; a line wider than the terminal was not wrapped there).
+wrapped; a line wider than the terminal was not wrapped there). A line that
+starts with `!` always starts a new command, unless the line before ends in `\\`.
 Every other line break is kept, so a multi-line snippet runs as separate
 commands. It strips the leading `!` from each command (so a shell `! cmd`
 negation at a line start is lost too), shows the result, and runs it in
@@ -49,8 +50,11 @@ def clean(text: str, width: int | None = None) -> str:
         line = raw.strip()
         if out and (
             out[-1].endswith("\\")
-            or _indent(raw) >= base + 2
-            or len(prev) <= width < len(prev) + 1 + len(line.split()[0])
+            or not line.startswith("!")
+            and (
+                _indent(raw) >= base + 2
+                or len(prev) <= width < len(prev) + 1 + len(line.split()[0])
+            )
         ):
             out[-1] = out[-1].removesuffix("\\").rstrip() + " " + line
         else:
