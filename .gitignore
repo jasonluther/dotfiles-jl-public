@@ -23,3 +23,8 @@ node_modules/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Secrets: never commit local environment files
+.env
+.env.*
+!.env.example
