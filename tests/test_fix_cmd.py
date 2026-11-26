@@ -60,6 +60,12 @@ def test_clean_starts_a_new_command_at_each_bang_when_the_copy_began_at_it():
     assert fix_cmd.clean(raw, width=74) == f"{cmd}\n{cmd} --apply"
 
 
+def test_clean_rejoins_a_terminal_wrap_before_a_bang():
+    assert (
+        fix_cmd.clean('[ "$aaaaaaaa"\n!= "b" ]\n', width=13) == '[ "$aaaaaaaa" != "b" ]'
+    )
+
+
 def test_clean_keeps_bang_not_at_start():
     assert fix_cmd.clean("echo hi !\n") == "echo hi !"
 
