@@ -35,6 +35,18 @@ def test_clean_strips_bang_without_space():
     assert fix_cmd.clean("!ls -la") == "ls -la"
 
 
+def test_clean_strips_the_bang_from_every_command():
+    # Claude Code suggests several `! cmd` lines, each wrapped by the terminal.
+    raw = (
+        "  ! cd ~/Code/gh/auditor && env -u CLAUDECODE -u AI_AGENT -u GH_TOKEN -u\n"
+        "  GITHUB_TOKEN python3 scripts/github_settings.py\n"
+        "  !cd ~/Code/gh/auditor && env -u CLAUDECODE -u AI_AGENT -u GH_TOKEN -u\n"
+        "  GITHUB_TOKEN python3 scripts/github_settings.py --apply\n"
+    )
+    cmd = "cd ~/Code/gh/auditor && env -u CLAUDECODE -u AI_AGENT -u GH_TOKEN -u GITHUB_TOKEN python3 scripts/github_settings.py"
+    assert fix_cmd.clean(raw, width=74) == f"{cmd}\n{cmd} --apply"
+
+
 def test_clean_keeps_bang_not_at_start():
     assert fix_cmd.clean("echo hi !\n") == "echo hi !"
 
