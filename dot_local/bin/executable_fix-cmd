@@ -10,8 +10,9 @@ the copy started a column into the indent), or its first word would not
 have fit in the terminal's width after the line before (where the terminal
 wrapped; a line wider than the terminal was not wrapped there).
 Every other line break is kept, so a multi-line snippet runs as separate
-commands. It strips a leading `!`, shows the command, and runs it in $SHELL
-after you press `y` (any other key aborts, no Enter needed).
+commands. It strips the leading `!` from each command (so a shell `! cmd`
+negation at a line start is lost too), shows the result, and runs it in
+$SHELL after you press `y` (any other key aborts, no Enter needed).
 
 A wrap that split a single word (a long URL or path) is rejoined with a
 space, and a terminal resized since the copy can misjudge a wrap, so check
@@ -53,13 +54,10 @@ def clean(text: str, width: int | None = None) -> str:
         ):
             out[-1] = out[-1].removesuffix("\\").rstrip() + " " + line
         else:
-            out.append(line)
+            out.append(line.removeprefix("!").lstrip())
         prev = raw
     out[-1] = out[-1].removesuffix("\\").rstrip()
-    cmd = "\n".join(out)
-    if cmd.startswith("!"):
-        cmd = cmd[1:].lstrip()
-    return cmd
+    return "\n".join(line for line in out if line)
 
 
 def _run(cmd: list[str]) -> str:
