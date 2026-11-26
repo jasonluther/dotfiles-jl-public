@@ -47,6 +47,25 @@ def test_clean_strips_the_bang_from_every_command():
     assert fix_cmd.clean(raw, width=74) == f"{cmd}\n{cmd} --apply"
 
 
+def test_clean_starts_a_new_command_at_each_bang_when_the_copy_began_at_it():
+    # Selecting from the first `!` drops its indent, so every later line looks
+    # deeper; a `!` line still starts its own command.
+    raw = (
+        "! cd ~/Code/gh/auditor && env -u CLAUDECODE -u AI_AGENT -u GH_TOKEN -u\n"
+        "  GITHUB_TOKEN python3 scripts/github_settings.py\n"
+        "  ! cd ~/Code/gh/auditor && env -u CLAUDECODE -u AI_AGENT -u GH_TOKEN -u\n"
+        "  GITHUB_TOKEN python3 scripts/github_settings.py --apply\n"
+    )
+    cmd = "cd ~/Code/gh/auditor && env -u CLAUDECODE -u AI_AGENT -u GH_TOKEN -u GITHUB_TOKEN python3 scripts/github_settings.py"
+    assert fix_cmd.clean(raw, width=74) == f"{cmd}\n{cmd} --apply"
+
+
+def test_clean_rejoins_a_terminal_wrap_before_a_bang():
+    assert (
+        fix_cmd.clean('[ "$aaaaaaaa"\n!= "b" ]\n', width=13) == '[ "$aaaaaaaa" != "b" ]'
+    )
+
+
 def test_clean_keeps_bang_not_at_start():
     assert fix_cmd.clean("echo hi !\n") == "echo hi !"
 
