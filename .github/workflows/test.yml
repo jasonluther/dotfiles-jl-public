@@ -24,6 +24,12 @@ jobs:
 
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
 
+      # tests/test_claude_settings_layout.py renders a template with chezmoi.
+      - name: Install chezmoi
+        run: |
+          bash scripts/install-chezmoi.sh "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
       - name: pytest
         run: uvx pytest -q tests
 

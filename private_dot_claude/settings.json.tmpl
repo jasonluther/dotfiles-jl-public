@@ -1,5 +1,8 @@
 {{- /* Private overlay (optional): ~/.claude/plugins-private.json holds extra
      {"extraKnownMarketplaces": {...}, "enabledPlugins": {...}} kept out of this public repo. */ -}}
+{{- /* Claude Code rewrites this file itself and keeps the order it finds, adding new keys last,
+     one value per line. Keep keys here in the order and layout of the saved file, or every
+     `chezmoi diff` shows moved lines. */ -}}
 {{- $plugins := dict -}}
 {{- $pluginsPath := joinPath .chezmoi.homeDir ".claude/plugins-private.json" -}}
 {{- if stat $pluginsPath }}{{ $plugins = include $pluginsPath | fromJson }}{{ end -}}
@@ -101,11 +104,6 @@
   },
   "model": "opus",
   "enableAllProjectMcpServers": true,
-  "extraKnownMarketplaces": {
-    "jasonluther-auditor": { "source": { "source": "github", "repo": "jasonluther/auditor" }, "autoUpdate": true },
-    "claude-guards": { "source": { "source": "github", "repo": "kilotronic/claude-guards" }, "autoUpdate": true }{{- range $name, $m := (get $plugins "extraKnownMarketplaces" | default dict) }},
-    {{ toJson $name }}: {{ toJson $m }}{{- end }}
-  },
   "enabledPlugins": {
     "jl@jasonluther-auditor": true,
     "guards@claude-guards": true,
@@ -131,10 +129,33 @@
     "clangd-lsp@claude-plugins-official": false,
     "remember@claude-plugins-official": false
   },
+  "extraKnownMarketplaces": {
+    "jasonluther-auditor": {
+      "source": {
+        "source": "github",
+        "repo": "jasonluther/auditor"
+      },
+      "autoUpdate": true
+    },
+    "claude-guards": {
+      "source": {
+        "source": "github",
+        "repo": "kilotronic/claude-guards"
+      },
+      "autoUpdate": true
+    }{{- range $name, $m := (get $plugins "extraKnownMarketplaces" | default dict) }},
+    {{ toJson $name }}: {
+      "source": {
+        "source": {{ toJson $m.source.source }}{{- range $k := list "repo" "url" "ref" "path" }}{{- if hasKey $m.source $k }},
+        {{ toJson $k }}: {{ toJson (get $m.source $k) }}{{- end }}{{- end }}
+      },
+      "autoUpdate": {{ toJson (get $m "autoUpdate" | default false) }}
+    }{{- end }}
+  },
   "autoCompactWindow": 500000,
-  "remoteControlAtStartup": true,
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
+  "remoteControlAtStartup": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true{{- $automodePath := joinPath .chezmoi.homeDir ".claude/automode-partygame.json" }}{{- if stat $automodePath }},
   "autoMode": {{ include $automodePath | trimSuffix "\n" | indent 2 | trimPrefix "  " }}{{- end }}
